@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png?v=2" alt="LockOverseer" width="400">
+  <img src="brand.png" alt="LockOverseer" width="400">
 </p>
 
 Central player-authority plugin for [Deadlock](https://store.steampowered.com/app/1422450/Deadlock/) using the [Deadworks](https://github.com/Deadworks-net/deadworks) managed plugin system.
