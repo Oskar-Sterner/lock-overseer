@@ -85,4 +85,28 @@ public sealed class AuthorityCacheTests
         });
         c.SnapshotActiveBans().Count.ShouldBe(2);
     }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Concurrent_reads_do_not_throw_during_mutation()
+    {
+        var c = Build();
+        using var cts = new System.Threading.CancellationTokenSource(System.TimeSpan.FromMilliseconds(300));
+        var reader = System.Threading.Tasks.Task.Run(() =>
+        {
+            while (!cts.IsCancellationRequested)
+                _ = c.IsBanned(1);
+        });
+        var writer = System.Threading.Tasks.Task.Run(() =>
+        {
+            long i = 0;
+            while (!cts.IsCancellationRequested)
+            {
+                c.UpsertActiveBan(new Ban(i, 1, null, DateTimeOffset.UnixEpoch, null, null, new Issuer(null, "sys"), null));
+                c.RemoveActiveBan(1);
+                i++;
+            }
+        });
+        await System.Threading.Tasks.Task.WhenAll(reader, writer);
+        true.ShouldBeTrue();
+    }
 }
