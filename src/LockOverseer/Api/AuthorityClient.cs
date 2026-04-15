@@ -129,6 +129,10 @@ public sealed partial class AuthorityClient : IAuthorityClient
         return r.IsSuccess ? Result<IReadOnlyList<RoleResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<RoleResource>>.Fail(r.Error!);
     }
 
+    public ValueTask<Result<RoleResource>> CreateRoleAsync(string name, string? description, int priority, IReadOnlyList<string> flags, CancellationToken ct = default)
+        => PostAsync<object, RoleResource>("/roles",
+            new { name, description, priority, flags }, ct);
+
     public ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default)
         => DeleteAsync<BanResource>($"/bans/{banId}", new { reason, revoked_by = revokedBy }, ct);
 
