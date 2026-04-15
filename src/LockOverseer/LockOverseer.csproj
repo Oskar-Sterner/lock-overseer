@@ -46,6 +46,7 @@
     <PackageReference Include="Polly" Version="8.5.0" />
     <PackageReference Include="Polly.Extensions.Http" Version="3.0.0" />
     <PackageReference Include="Polly.Contrib.WaitAndRetry" Version="1.1.1" />
+    <PackageReference Include="Isopoh.Cryptography.Argon2" Version="2.0.0" />
   </ItemGroup>
 
   <Target Name="DeployToGame" AfterTargets="Build">
