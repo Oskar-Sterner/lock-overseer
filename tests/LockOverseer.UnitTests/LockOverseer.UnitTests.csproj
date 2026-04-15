@@ -24,5 +24,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\LockOverseer.Contracts\LockOverseer.Contracts.csproj" />
     <ProjectReference Include="..\..\src\LockOverseer\LockOverseer.csproj" />
+    <ProjectReference Include="..\..\tools\LockOverseer.KeyGen\LockOverseer.KeyGen.csproj" />
   </ItemGroup>
 </Project>
