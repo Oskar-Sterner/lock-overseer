@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>LockOverseer</RootNamespace>
+    <AssemblyName>LockOverseer</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <LangVersion>latest</LangVersion>
+
+    <DeadlockDir Condition="'$(DeadlockDir)' == ''">$(DEADLOCK_GAME_DIR)</DeadlockDir>
+    <DeadlockBin Condition="'$(DeadlockBin)' == ''">$(DeadlockDir)\game\bin\win64</DeadlockBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="DeadworksManaged.Api">
+      <HintPath>$(DeadlockBin)\managed\DeadworksManaged.Api.dll</HintPath>
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </Reference>
+    <Reference Include="Google.Protobuf">
+      <HintPath>$(DeadlockBin)\managed\Google.Protobuf.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LockOverseer.Contracts\LockOverseer.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Polly" Version="8.5.0" />
+    <PackageReference Include="Polly.Extensions.Http" Version="3.0.0" />
+  </ItemGroup>
+
+  <Target Name="DeployToGame" AfterTargets="Build">
+    <ItemGroup>
+      <DeployFiles Include="$(OutputPath)LockOverseer.dll;$(OutputPath)LockOverseer.pdb;$(OutputPath)LockOverseer.Contracts.dll;$(OutputPath)LockOverseer.Contracts.pdb" />
+      <DeployConfig Include="$(MSBuildProjectDirectory)\..\..\lockoverseer.json" Condition="Exists('$(MSBuildProjectDirectory)\..\..\lockoverseer.json')" />
+      <DeployConfig Include="$(MSBuildProjectDirectory)\..\..\admins.json" Condition="Exists('$(MSBuildProjectDirectory)\..\..\admins.json')" />
+      <DeployConfig Include="$(MSBuildProjectDirectory)\..\..\plugin_api_keys.json" Condition="Exists('$(MSBuildProjectDirectory)\..\..\plugin_api_keys.json')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(DeadlockBin)\managed\plugins" SkipUnchangedFiles="false" Retries="0" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(DeployConfig)" DestinationFolder="$(DeadlockBin)\managed\plugins" SkipUnchangedFiles="false" Retries="0" ContinueOnError="WarnAndContinue" />
+  </Target>
+
+</Project>

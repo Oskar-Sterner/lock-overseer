@@ -1,0 +1,28 @@
+{
+  "AuthorityApi": {
+    "BaseUrl": "http://127.0.0.1:8080",
+    "ApiKey": "${LOCKOVERSEER_API_KEY}",
+    "TimeoutMs": 5000,
+    "RetryCount": 3
+  },
+  "Cache": {
+    "ReconcileIntervalSeconds": 300,
+    "ExpirySweepSeconds": 30,
+    "MaxActiveBans": 100000,
+    "MaxActiveMutes": 100000
+  },
+  "Http": {
+    "Enabled": true,
+    "BindAddress": "127.0.0.1",
+    "Port": 27080,
+    "RequireTls": false,
+    "RateLimitPerMinute": 60
+  },
+  "Bootstrap": {
+    "AdminsFile": "admins.json",
+    "SeedOnlyIfEmpty": true
+  },
+  "Logging": {
+    "LogLevel": { "Default": "Information", "LockOverseer": "Debug" }
+  }
+}
