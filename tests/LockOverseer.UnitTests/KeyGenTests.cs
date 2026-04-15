@@ -24,4 +24,22 @@ public sealed class KeyGenTests
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
+
+    [Fact]
+    public void Revoke_marks_entry_revoked()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"keys_{Guid.NewGuid():N}.json");
+        try
+        {
+            KeyFileOps.AddKey(path, "a");
+            KeyFileOps.AddKey(path, "b");
+
+            KeyFileOps.RevokeKey(path, label: "a").ShouldBeTrue();
+
+            var entries = System.Text.Json.JsonSerializer.Deserialize<LockOverseer.Http.ApiKeyEntry[]>(File.ReadAllText(path))!;
+            entries.Single(e => e.Label == "a").Revoked.ShouldBeTrue();
+            entries.Single(e => e.Label == "b").Revoked.ShouldBeFalse();
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
 }
