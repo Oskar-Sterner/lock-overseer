@@ -46,6 +46,16 @@ public sealed class PlayerResolver
         if (prefixMatches.Length > 1)
             return new ResolverResult(ResolverResultKind.Ambiguous, 0, null, prefixMatches);
 
+        var substringMatches = players
+            .Where(p => p.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (substringMatches.Length == 1)
+            return new ResolverResult(ResolverResultKind.Resolved, substringMatches[0].SteamId, substringMatches[0].Slot, Array.Empty<ResolverCandidate>());
+
+        if (substringMatches.Length > 1)
+            return new ResolverResult(ResolverResultKind.Ambiguous, 0, null, substringMatches);
+
         return new ResolverResult(ResolverResultKind.NotFound, 0, null, Array.Empty<ResolverCandidate>());
     }
 }

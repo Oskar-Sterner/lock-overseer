@@ -88,4 +88,35 @@ public sealed class PlayerResolverTests
         result.Kind.ShouldBe(ResolverResultKind.Ambiguous);
         result.Matches.Select(m => m.Name).ShouldBe(new[] { "Alice", "Alan" }, ignoreOrder: true);
     }
+
+    [Fact]
+    public void Substring_fallback_resolves_single_hit()
+    {
+        var connected = new List<ResolverCandidate>
+        {
+            new(76561198000000020, 1, "xXAlice42Xx"),
+            new(76561198000000021, 2, "Bob"),
+        };
+        var resolver = new PlayerResolver(() => connected);
+
+        var result = resolver.Resolve("lice");
+
+        result.Kind.ShouldBe(ResolverResultKind.Resolved);
+        result.SteamId.ShouldBe(76561198000000020L);
+    }
+
+    [Fact]
+    public void Substring_with_two_hits_is_ambiguous()
+    {
+        var connected = new List<ResolverCandidate>
+        {
+            new(76561198000000030, 1, "xXAliceXx"),
+            new(76561198000000031, 2, "yYAliceYy"),
+        };
+        var resolver = new PlayerResolver(() => connected);
+
+        var result = resolver.Resolve("lice");
+
+        result.Kind.ShouldBe(ResolverResultKind.Ambiguous);
+    }
 }
