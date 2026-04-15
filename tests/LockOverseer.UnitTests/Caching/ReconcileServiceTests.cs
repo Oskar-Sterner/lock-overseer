@@ -26,8 +26,15 @@ public sealed class ReconcileServiceTests
         client.GetActiveBansAsync(Arg.Any<CancellationToken>())
               .Returns(Result<IReadOnlyList<BanResource>>.Ok(new[]
               {
-                  new BanResource(1, 42, null, DateTimeOffset.UnixEpoch, null, null,
-                      new IssuerResource(null, "sys"), null)
+                  new BanResource(1, 42, null,
+                      IssuedAt: DateTimeOffset.UnixEpoch,
+                      ExpiresAt: null,
+                      RevokedAt: null,
+                      RevokeReason: null,
+                      IssuedBySteamId: null,
+                      IssuedByLabel: "sys",
+                      RevokedBySteamId: null,
+                      RevokedByLabel: null)
               }));
         client.GetActiveMutesAsync(Arg.Any<CancellationToken>())
               .Returns(Result<IReadOnlyList<MuteResource>>.Ok(Array.Empty<MuteResource>()));

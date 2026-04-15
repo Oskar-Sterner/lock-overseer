@@ -1,23 +1,27 @@
-using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Containers;
-using DotNet.Testcontainers.Images;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
 namespace LockOverseer.IntegrationTests.Fixtures;
 
 /// <summary>
-/// Spins up the MockAPI container (builds from MockAPI/Dockerfile) for integration tests.
-/// Requires a running Docker daemon accessible to the current user; individual tests should
-/// use <see cref="SkipIfDockerUnavailable"/> or catch <see cref="DockerUnavailableException"/>
-/// if Docker is not reachable in the environment.
+/// Launches the real MockAPI (`uv run lockoverseer-mockapi serve`) as a local subprocess
+/// against a fresh SQLite database and a freshly-provisioned API key.
+///
+/// This exercises the full plugin ↔ MockAPI HTTP contract (exactly what the user asked to
+/// validate) without requiring Docker or Testcontainers. `DockerAvailable` is kept as a
+/// property for backward compatibility with existing tests, but now signals
+/// "MockAPI subprocess is up" and is only false when `uv` or the MockAPI package is missing.
 /// </summary>
 public sealed class MockApiContainerFixture : IAsyncLifetime
 {
-    private IContainer? _container;
-    private IFutureDockerImage? _image;
+    private Process? _proc;
+    private string? _workDir;
+    private string? _tempDir;
 
     public Uri BaseUri { get; private set; } = null!;
-    public string ApiKey { get; private set; } = "integration-test-key";
+    public string ApiKey { get; private set; } = "";
     public bool DockerAvailable { get; private set; }
     public string? UnavailableReason { get; private set; }
 
@@ -25,46 +29,157 @@ public sealed class MockApiContainerFixture : IAsyncLifetime
     {
         try
         {
-            var dockerfileDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            _workDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
                 "..", "..", "..", "..", "..", "..", "..", "MockAPI"));
 
-            if (!File.Exists(Path.Combine(dockerfileDir, "Dockerfile")))
+            if (!File.Exists(Path.Combine(_workDir, "pyproject.toml")))
             {
-                UnavailableReason = $"MockAPI Dockerfile not found at {dockerfileDir}";
+                UnavailableReason = $"MockAPI not found at {_workDir}";
                 return;
             }
 
-            _image = new ImageFromDockerfileBuilder()
-                .WithDockerfileDirectory(dockerfileDir)
-                .WithDockerfile("Dockerfile")
-                .Build();
-            await _image.CreateAsync();
+            _tempDir = Path.Combine(Path.GetTempPath(), $"lockoverseer_mockapi_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(_tempDir);
+            var dbPath = Path.Combine(_tempDir, "mock.db");
+            var dbUrl = $"sqlite+aiosqlite:///{dbPath}";
 
-            _container = new ContainerBuilder()
-                .WithImage(_image)
-                .WithPortBinding(8080, assignRandomHostPort: true)
-                .WithEnvironment("LOCKOVERSEER_BIND_PORT", "8080")
-                .WithEnvironment("LOCKOVERSEER_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-                .WithWaitStrategy(Wait.ForUnixContainer()
-                    .UntilHttpRequestIsSucceeded(r => r.ForPath("/health").ForPort(8080)))
-                .Build();
-            await _container.StartAsync();
+            // 1. Provision an API key (also creates + migrates the DB).
+            var key = await ProvisionKeyAsync(dbUrl).ConfigureAwait(false);
+            if (key is null)
+            {
+                UnavailableReason = "Failed to provision API key via uv run lockoverseer-mockapi keys new";
+                return;
+            }
+            ApiKey = key;
 
-            BaseUri = new Uri($"http://localhost:{_container.GetMappedPublicPort(8080)}");
+            // 2. Pick a free port and launch the server.
+            var port = FindFreePort();
+            _proc = StartServer(dbUrl, port);
+
+            // 3. Wait for /health to come up.
+            BaseUri = new Uri($"http://127.0.0.1:{port}");
+            var ready = await WaitForHealthyAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            if (!ready)
+            {
+                UnavailableReason = "MockAPI did not become healthy within 30s";
+                return;
+            }
+
             DockerAvailable = true;
         }
         catch (Exception ex)
         {
             DockerAvailable = false;
-            UnavailableReason = $"Docker unavailable: {ex.Message}";
+            UnavailableReason = $"MockAPI unavailable: {ex.Message}";
         }
     }
 
-    public async Task DisposeAsync()
+    private async Task<string?> ProvisionKeyAsync(string dbUrl)
     {
-        if (_container is not null)
-            await _container.DisposeAsync();
-        if (_image is not null)
-            await _image.DisposeAsync();
+        var psi = new ProcessStartInfo
+        {
+            FileName = "uv",
+            ArgumentList = { "run", "lockoverseer-mockapi", "keys", "new", "--label", "integration" },
+            WorkingDirectory = _workDir!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.Environment["LOCKOVERSEER_DATABASE_URL"] = dbUrl;
+
+        using var proc = Process.Start(psi)!;
+        var stdout = await proc.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
+        var stderr = await proc.StandardError.ReadToEndAsync().ConfigureAwait(false);
+        await proc.WaitForExitAsync().ConfigureAwait(false);
+
+        if (proc.ExitCode != 0)
+        {
+            UnavailableReason = $"keys new exited {proc.ExitCode}: {stderr}";
+            return null;
+        }
+
+        foreach (var line in stdout.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("key: "))
+                return trimmed["key: ".Length..].Trim();
+        }
+        return null;
+    }
+
+    private Process StartServer(string dbUrl, int port)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "uv",
+            ArgumentList = { "run", "lockoverseer-mockapi", "serve" },
+            WorkingDirectory = _workDir!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.Environment["LOCKOVERSEER_DATABASE_URL"] = dbUrl;
+        psi.Environment["LOCKOVERSEER_BIND_HOST"] = "127.0.0.1";
+        psi.Environment["LOCKOVERSEER_BIND_PORT"] = port.ToString();
+        psi.Environment["LOCKOVERSEER_LOG_LEVEL"] = "WARNING";
+
+        var proc = Process.Start(psi)!;
+        // Drain stdout/stderr asynchronously to prevent buffer-fill deadlock.
+        _ = Task.Run(async () => { try { await proc.StandardOutput.ReadToEndAsync(); } catch { /* ignore */ } });
+        _ = Task.Run(async () => { try { await proc.StandardError.ReadToEndAsync(); } catch { /* ignore */ } });
+        return proc;
+    }
+
+    private async Task<bool> WaitForHealthyAsync(TimeSpan timeout)
+    {
+        using var http = new HttpClient { BaseAddress = BaseUri, Timeout = TimeSpan.FromSeconds(1) };
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var r = await http.GetAsync("/health").ConfigureAwait(false);
+                if (r.IsSuccessStatusCode)
+                    return true;
+            }
+            catch
+            {
+                // server not up yet
+            }
+            await Task.Delay(250).ConfigureAwait(false);
+        }
+        return false;
+    }
+
+    private static int FindFreePort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    public Task DisposeAsync()
+    {
+        try
+        {
+            if (_proc is not null && !_proc.HasExited)
+            {
+                _proc.Kill(entireProcessTree: true);
+                _proc.WaitForExit(5000);
+            }
+            _proc?.Dispose();
+        }
+        catch { /* best-effort */ }
+
+        try
+        {
+            if (_tempDir is not null && Directory.Exists(_tempDir))
+                Directory.Delete(_tempDir, recursive: true);
+        }
+        catch { /* best-effort */ }
+
+        return Task.CompletedTask;
     }
 }

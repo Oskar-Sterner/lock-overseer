@@ -34,7 +34,9 @@ public sealed class AuthorityClientTests
             return FakeHandler.Json(HttpStatusCode.OK, """
                 {"items":[{"id":1,"steam_id":1,"reason":null,
                            "issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
-                           "issued_by":{"steam_id":null,"label":"sys"},"revoked_by":null}],
+                           "revoke_reason":null,
+                           "issued_by_steam_id":null,"issued_by_label":"sys",
+                           "revoked_by_steam_id":null,"revoked_by_label":null}],
                  "page":1,"page_size":1000,"total":1}
                 """);
         });
@@ -44,6 +46,7 @@ public sealed class AuthorityClientTests
         r.IsSuccess.ShouldBeTrue();
         r.Value!.Count.ShouldBe(1);
         r.Value[0].Id.ShouldBe(1);
+        r.Value[0].IssuedByLabel.ShouldBe("sys");
     }
 
     [Theory]
@@ -79,21 +82,61 @@ public sealed class AuthorityClientTests
             seenKey = req.Headers.TryGetValues("Idempotency-Key", out var v) ? System.Linq.Enumerable.First(v) : null;
             return FakeHandler.Json(HttpStatusCode.Created, """
                 {"id":9,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
-                 "issued_by":{"steam_id":null,"label":"chat"},"revoked_by":null}
+                 "revoke_reason":null,
+                 "issued_by_steam_id":null,"issued_by_label":"chat",
+                 "revoked_by_steam_id":null,"revoked_by_label":null}
                 """);
         });
 
         var sut = Build(handler);
-        var req = new LockOverseer.Api.Dto.BanResource(
-            0, 1, "x",
-            DateTimeOffset.UtcNow, null, null,
-            new LockOverseer.Api.Dto.IssuerResource(null, "chat"), null);
-        var r = await sut.IssueBanAsync(req, CancellationToken.None);
+        var body = new
+        {
+            steam_id = 1L,
+            duration_minutes = (int?)null,
+            reason = "x",
+            issued_by = new { steam_id = (long?)null, label = "chat" },
+        };
+        var r = await sut.IssueBanAsync(body, CancellationToken.None);
 
         r.IsSuccess.ShouldBeTrue();
         seenKey.ShouldNotBeNull();
         Guid.TryParse(seenKey, out var parsed).ShouldBeTrue();
         ((parsed.ToByteArray()[7] & 0xF0) >> 4).ShouldBe(7); // version 7
+    }
+
+    [Fact]
+    public async Task IssueBanAsync_sends_flat_nested_body_to_authority()
+    {
+        // Regression guard: plugin must POST the MockAPI BanCreateIn shape exactly.
+        string? seenBody = null;
+        var handler = new FakeHandler((req, _) =>
+        {
+            seenBody = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return FakeHandler.Json(HttpStatusCode.Created, """
+                {"id":9,"steam_id":42,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
+                 "revoke_reason":null,"issued_by_steam_id":null,"issued_by_label":"chat",
+                 "revoked_by_steam_id":null,"revoked_by_label":null}
+                """);
+        });
+
+        var sut = Build(handler);
+        var body = new
+        {
+            steam_id = 42L,
+            duration_minutes = (int?)60,
+            reason = "x",
+            issued_by = new { steam_id = (long?)null, label = "chat" },
+        };
+        var r = await sut.IssueBanAsync(body, CancellationToken.None);
+
+        r.IsSuccess.ShouldBeTrue();
+        seenBody.ShouldNotBeNull();
+        using var doc = System.Text.Json.JsonDocument.Parse(seenBody);
+        var root = doc.RootElement;
+        root.GetProperty("steam_id").GetInt64().ShouldBe(42);
+        root.GetProperty("duration_minutes").GetInt32().ShouldBe(60);
+        var issuedBy = root.GetProperty("issued_by");
+        issuedBy.GetProperty("label").GetString().ShouldBe("chat");
     }
 
     [Fact]
@@ -106,7 +149,7 @@ public sealed class AuthorityClientTests
             return FakeHandler.Json(HttpStatusCode.Created, """
                 {"id":5,"steam_id":1,"role_name":"mod",
                  "assigned_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
-                 "assigned_by":{"steam_id":null,"label":"chat"}}
+                 "assigned_by_steam_id":null,"assigned_by_label":"chat"}
                 """);
         });
         var sut = Build(handler);
@@ -126,8 +169,9 @@ public sealed class AuthorityClientTests
             key = req.Headers.TryGetValues("Idempotency-Key", out var v) ? System.Linq.Enumerable.First(v) : null;
             return FakeHandler.Json(HttpStatusCode.OK, """
                 {"id":1,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,
-                 "revoked_at":"2026-04-15T00:01:00Z","issued_by":{"steam_id":null,"label":"chat"},
-                 "revoked_by":{"steam_id":null,"label":"chat"}}
+                 "revoked_at":"2026-04-15T00:01:00Z","revoke_reason":"appeal",
+                 "issued_by_steam_id":null,"issued_by_label":"chat",
+                 "revoked_by_steam_id":null,"revoked_by_label":"chat"}
                 """);
         });
         var sut = Build(handler);
@@ -149,7 +193,8 @@ public sealed class AuthorityClientTests
             if (calls < 3) return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
             return FakeHandler.Json(HttpStatusCode.Created, """
                 {"id":1,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
-                 "issued_by":{"steam_id":null,"label":"chat"},"revoked_by":null}
+                 "revoke_reason":null,"issued_by_steam_id":null,"issued_by_label":"chat",
+                 "revoked_by_steam_id":null,"revoked_by_label":null}
                 """);
         });
 
@@ -160,10 +205,14 @@ public sealed class AuthorityClientTests
         var sp = services.BuildServiceProvider();
         var client = sp.GetRequiredService<IAuthorityClient>();
 
-        var ban = new LockOverseer.Api.Dto.BanResource(
-            0, 1, "x", DateTimeOffset.UtcNow, null, null,
-            new LockOverseer.Api.Dto.IssuerResource(null, "chat"), null);
-        var r = await client.IssueBanAsync(ban, CancellationToken.None);
+        var body = new
+        {
+            steam_id = 1L,
+            duration_minutes = (int?)null,
+            reason = "x",
+            issued_by = new { steam_id = (long?)null, label = "chat" },
+        };
+        var r = await client.IssueBanAsync(body, CancellationToken.None);
 
         r.IsSuccess.ShouldBeTrue();
         calls.ShouldBe(3);

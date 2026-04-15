@@ -87,6 +87,17 @@ public sealed class ReconcileService : BackgroundService
         }
     }
 
-    private static Ban ToModel(BanResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
-    private static Mute ToModel(MuteResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
+    private static Ban ToModel(BanResource r) => new(
+        r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.IssuedBySteamId, r.IssuedByLabel),
+        r.RevokedBySteamId is null && r.RevokedByLabel is null && r.RevokedAt is null
+            ? null
+            : new Issuer(r.RevokedBySteamId, r.RevokedByLabel));
+
+    private static Mute ToModel(MuteResource r) => new(
+        r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.IssuedBySteamId, r.IssuedByLabel),
+        r.RevokedBySteamId is null && r.RevokedByLabel is null && r.RevokedAt is null
+            ? null
+            : new Issuer(r.RevokedBySteamId, r.RevokedByLabel));
 }

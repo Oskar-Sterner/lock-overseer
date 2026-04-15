@@ -17,9 +17,9 @@ public interface IAuthorityClient
     ValueTask<Result<IReadOnlyList<MuteResource>>> GetActiveMutesAsync(CancellationToken ct = default);
     ValueTask<Result<IReadOnlyList<RoleResource>>> GetRolesAsync(CancellationToken ct = default);
 
-    ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default);
+    ValueTask<Result<BanResource>> IssueBanAsync(object body, CancellationToken ct = default);
     ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default);
-    ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default);
+    ValueTask<Result<MuteResource>> IssueMuteAsync(object body, CancellationToken ct = default);
     ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default);
 
     ValueTask<Result<RoleAssignmentResource>> GrantRoleAsync(long steamId, string roleName, int? durationMinutes, IssuerResource assignedBy, CancellationToken ct = default);

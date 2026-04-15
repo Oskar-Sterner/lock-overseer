@@ -36,10 +36,14 @@ public sealed class LockOverseerService : ILockOverseerService
         var r = await _client.GetPlayerAsync(steamId, ct).ConfigureAwait(false);
         if (!r.IsSuccess) return null;
         var p = r.Value!;
+        // MockAPI's PlayerOut is minimal. Enrich from the local cache + connected state
+        // for fields the authority doesn't include in the player resource.
+        var role = _cache.GetConnectedRole(steamId) ?? _cache.GetRole(steamId);
+        var flags = _cache.GetFlagsSnapshot(steamId);
+        Ban? activeBan = _cache.TryGetActiveBan(steamId, out var b) ? b : null;
+        Mute? activeMute = _cache.TryGetActiveMute(steamId, out var m) ? m : null;
         return new PlayerRecord(p.SteamId, p.LastKnownName, p.FirstConnectAt, p.LastConnectAt,
-            p.TotalPlaytimeSeconds, p.CurrentRole, p.Flags,
-            p.ActiveBan is null ? null : ToModel(p.ActiveBan),
-            p.ActiveMute is null ? null : ToModel(p.ActiveMute));
+            p.TotalPlaytimeSeconds, role, flags, activeBan, activeMute);
     }
 
     public ValueTask<IReadOnlyList<Ban>> GetActiveBansAsync(CancellationToken ct = default)
@@ -53,13 +57,14 @@ public sealed class LockOverseerService : ILockOverseerService
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var dto = new BanResource(0, r.SteamId, r.Reason,
-                IssuedAt: DateTimeOffset.UnixEpoch,
-                ExpiresAt: r.DurationMinutes is int m ? DateTimeOffset.UtcNow.AddMinutes(m) : null,
-                RevokedAt: null,
-                IssuedBy: new IssuerResource(r.IssuedBy.SteamId, r.IssuedBy.Label),
-                RevokedBy: null);
-            var api = await _client.IssueBanAsync(dto, ct).ConfigureAwait(false);
+            var body = new
+            {
+                steam_id = r.SteamId,
+                duration_minutes = r.DurationMinutes,
+                reason = r.Reason,
+                issued_by = new { steam_id = r.IssuedBy.SteamId, label = r.IssuedBy.Label },
+            };
+            var api = await _client.IssueBanAsync(body, ct).ConfigureAwait(false);
             if (!api.IsSuccess) return Result<Ban>.Fail(api.Error!);
             var model = ToModel(api.Value!);
             _cache.UpsertActiveBan(model);
@@ -84,13 +89,14 @@ public sealed class LockOverseerService : ILockOverseerService
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var dto = new MuteResource(0, r.SteamId, r.Reason,
-                IssuedAt: DateTimeOffset.UnixEpoch,
-                ExpiresAt: r.DurationMinutes is int m ? DateTimeOffset.UtcNow.AddMinutes(m) : null,
-                RevokedAt: null,
-                IssuedBy: new IssuerResource(r.IssuedBy.SteamId, r.IssuedBy.Label),
-                RevokedBy: null);
-            var api = await _client.IssueMuteAsync(dto, ct).ConfigureAwait(false);
+            var body = new
+            {
+                steam_id = r.SteamId,
+                duration_minutes = r.DurationMinutes,
+                reason = r.Reason,
+                issued_by = new { steam_id = r.IssuedBy.SteamId, label = r.IssuedBy.Label },
+            };
+            var api = await _client.IssueMuteAsync(body, ct).ConfigureAwait(false);
             if (!api.IsSuccess) return Result<Mute>.Fail(api.Error!);
             var model = ToModel(api.Value!);
             _cache.UpsertActiveMute(model);
@@ -178,9 +184,26 @@ public sealed class LockOverseerService : ILockOverseerService
         return result.IsSuccess ? result.Value! : Array.Empty<AuditEntry>();
     }
 
-    // --- mappers ---
-    private static Ban ToModel(BanResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
-    private static Mute ToModel(MuteResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
-    private static RoleAssignment ToModel(RoleAssignmentResource r) => new(r.Id, r.SteamId, r.RoleName, r.AssignedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.AssignedBy.SteamId, r.AssignedBy.Label));
-    private static FlagAssignment ToModel(FlagAssignmentResource r) => new(r.Id, r.SteamId, r.Flag, r.AssignedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.AssignedBy.SteamId, r.AssignedBy.Label));
+    // --- mappers (flat issuer fields, matching MockAPI BanOut/MuteOut/*AssignmentOut) ---
+    private static Ban ToModel(BanResource r) => new(
+        r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.IssuedBySteamId, r.IssuedByLabel),
+        r.RevokedBySteamId is null && r.RevokedByLabel is null && r.RevokedAt is null
+            ? null
+            : new Issuer(r.RevokedBySteamId, r.RevokedByLabel));
+
+    private static Mute ToModel(MuteResource r) => new(
+        r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.IssuedBySteamId, r.IssuedByLabel),
+        r.RevokedBySteamId is null && r.RevokedByLabel is null && r.RevokedAt is null
+            ? null
+            : new Issuer(r.RevokedBySteamId, r.RevokedByLabel));
+
+    private static RoleAssignment ToModel(RoleAssignmentResource r) => new(
+        r.Id, r.SteamId, r.RoleName, r.AssignedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.AssignedBySteamId, r.AssignedByLabel));
+
+    private static FlagAssignment ToModel(FlagAssignmentResource r) => new(
+        r.Id, r.SteamId, r.Flag, r.AssignedAt, r.ExpiresAt, r.RevokedAt,
+        new Issuer(r.AssignedBySteamId, r.AssignedByLabel));
 }

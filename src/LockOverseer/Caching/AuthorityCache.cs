@@ -98,6 +98,9 @@ public sealed class AuthorityCache
     public string? GetConnectedRole(long steamId) =>
         _connected.TryGetValue(steamId, out var s) ? s.RoleName : null;
 
+    public IReadOnlyList<string> GetFlagsSnapshot(long steamId) =>
+        _connected.TryGetValue(steamId, out var s) ? s.EffectiveFlags.ToArray() : Array.Empty<string>();
+
     public int? GetRolePriority(string roleName) =>
         _roles.TryGetValue(roleName, out var def) ? def.Priority : (int?)null;
 

@@ -15,12 +15,16 @@ public sealed class DtoRoundTripTests
         const string json = """
             {"id":5,"steam_id":76561198000000001,"reason":"spam",
              "issued_at":"2026-04-15T12:00:00Z","expires_at":null,"revoked_at":null,
-             "issued_by":{"steam_id":null,"label":"chat"},"revoked_by":null}
+             "revoke_reason":null,
+             "issued_by_steam_id":null,"issued_by_label":"chat",
+             "revoked_by_steam_id":null,"revoked_by_label":null}
             """;
         var r = JsonSerializer.Deserialize<BanResource>(json, JsonDefaults.Options)!;
         r.Id.ShouldBe(5);
         r.SteamId.ShouldBe(76561198000000001);
-        r.IssuedBy.Label.ShouldBe("chat");
+        r.IssuedByLabel.ShouldBe("chat");
+        r.IssuedBySteamId.ShouldBeNull();
+        r.RevokedByLabel.ShouldBeNull();
         r.IssuedAt.ShouldBe(new DateTimeOffset(2026, 4, 15, 12, 0, 0, TimeSpan.Zero));
     }
 

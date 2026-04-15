@@ -29,7 +29,7 @@ public sealed class BootstrapAdminsTests
                               Arg.Any<IssuerResource>(), Arg.Any<CancellationToken>())
               .Returns(Result<RoleAssignmentResource>.Ok(new RoleAssignmentResource(
                   1, 76561198000000001, "admin", System.DateTimeOffset.UnixEpoch, null, null,
-                  new IssuerResource(null, "bootstrap"))));
+                  AssignedBySteamId: null, AssignedByLabel: "bootstrap")));
 
         var sut = new BootstrapAdmins(client, NullLogger<BootstrapAdmins>.Instance);
         await sut.SeedAsync(tmp, CancellationToken.None);
@@ -49,7 +49,7 @@ public sealed class BootstrapAdminsTests
               .Returns(Result<System.Collections.Generic.IReadOnlyList<RoleAssignmentResource>>.Ok(new[]
               {
                   new RoleAssignmentResource(1, 1, "admin", System.DateTimeOffset.UnixEpoch, null, null,
-                      new IssuerResource(null, "chat"))
+                      AssignedBySteamId: null, AssignedByLabel: "chat")
               }));
 
         var sut = new BootstrapAdmins(client, NullLogger<BootstrapAdmins>.Instance);

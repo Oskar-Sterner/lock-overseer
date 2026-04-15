@@ -85,8 +85,8 @@ public sealed partial class AuthorityClient : IAuthorityClient
         return Result<T>.Fail(new AuthorityError(kind, $"HTTP {(int)resp.StatusCode}", detail));
     }
 
-    public async ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default)
-        => await PostAsync<BanResource, BanResource>("/bans", request, ct).ConfigureAwait(false);
+    public async ValueTask<Result<BanResource>> IssueBanAsync(object body, CancellationToken ct = default)
+        => await PostAsync<object, BanResource>("/bans", body, ct).ConfigureAwait(false);
 
     private async ValueTask<Result<TResp>> PostAsync<TReq, TResp>(string path, TReq body, CancellationToken ct, string? idempotencyKey = null)
     {
@@ -132,8 +132,8 @@ public sealed partial class AuthorityClient : IAuthorityClient
     public ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default)
         => DeleteAsync<BanResource>($"/bans/{banId}", new { reason, revoked_by = revokedBy }, ct);
 
-    public ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default)
-        => PostAsync<MuteResource, MuteResource>("/mutes", request, ct);
+    public ValueTask<Result<MuteResource>> IssueMuteAsync(object body, CancellationToken ct = default)
+        => PostAsync<object, MuteResource>("/mutes", body, ct);
 
     public ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default)
         => DeleteAsync<MuteResource>($"/mutes/{muteId}", new { reason, revoked_by = revokedBy }, ct);
@@ -171,7 +171,7 @@ public sealed partial class AuthorityClient : IAuthorityClient
         var items = r.Value!.Items;
         if (items.Count == 0) return Result<RoleAssignment>.Fail(new AuthorityError(AuthorityErrorKind.NotFound, "no active role"));
         var a = items[0];
-        return Result<RoleAssignment>.Ok(new RoleAssignment(a.Id, a.SteamId, a.RoleName, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBy.SteamId, a.AssignedBy.Label)));
+        return Result<RoleAssignment>.Ok(new RoleAssignment(a.Id, a.SteamId, a.RoleName, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBySteamId, a.AssignedByLabel)));
     }
 
     public async ValueTask<Result<FlagAssignment>> GetActiveFlagAssignmentAsync(long steamId, string flag, CancellationToken ct = default)
@@ -181,7 +181,7 @@ public sealed partial class AuthorityClient : IAuthorityClient
         var items = r.Value!.Items;
         if (items.Count == 0) return Result<FlagAssignment>.Fail(new AuthorityError(AuthorityErrorKind.NotFound, "no active flag"));
         var a = items[0];
-        return Result<FlagAssignment>.Ok(new FlagAssignment(a.Id, a.SteamId, a.Flag, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBy.SteamId, a.AssignedBy.Label)));
+        return Result<FlagAssignment>.Ok(new FlagAssignment(a.Id, a.SteamId, a.Flag, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBySteamId, a.AssignedByLabel)));
     }
 
     public async ValueTask<Result<IReadOnlyList<AuditEntry>>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default)

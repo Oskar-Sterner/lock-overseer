@@ -55,7 +55,7 @@ public sealed class PlaytimeTrackerTests
 
             var client = Substitute.For<IAuthorityClient>();
             client.AddPlaytimeAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-                  .Returns(Result<PlayerResource>.Ok(new PlayerResource(1, null, null, null, 0, null, Array.Empty<string>(), null, null)));
+                  .Returns(Result<PlayerResource>.Ok(new PlayerResource(1, null, null, null, 0)));
 
             var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
             var sut = new PlaytimeTracker(client, outbox, time, NullLogger<PlaytimeTracker>.Instance);

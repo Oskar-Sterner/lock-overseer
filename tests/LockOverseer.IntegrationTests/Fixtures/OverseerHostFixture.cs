@@ -3,9 +3,7 @@ using LockOverseer.Caching;
 using LockOverseer.Contracts;
 using LockOverseer.Http;
 using LockOverseer.Http.Endpoints;
-using LockOverseer.Lifecycle;
 using LockOverseer.Services;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,35 +13,59 @@ namespace LockOverseer.IntegrationTests.Fixtures;
 
 /// <summary>
 /// In-process host that composes the LockOverseer DI graph (Phase B) pointed at a
-/// Testcontainers MockAPI and starts an HttpHost exposing the plugin's REST surface.
+/// MockAPI subprocess and starts an HttpHost exposing the plugin's REST surface.
+///
+/// Initialization is deferred to the first <see cref="UseAuthority"/> call because
+/// xunit's IClassFixture creates the fixture BEFORE the test class constructor runs
+/// (so the authority URI isn't known at <see cref="InitializeAsync"/> time).
 /// </summary>
 public sealed class OverseerHostFixture : IAsyncLifetime
 {
+    private readonly SemaphoreSlim _initLock = new(1, 1);
     private IHost? _host;
     private HttpHost? _httpHost;
-    private Uri? _authority;
+    private ILockOverseerService? _service;
+    private bool _started;
 
-    public ILockOverseerService Service { get; private set; } = null!;
+    public ILockOverseerService Service =>
+        _service ?? throw new InvalidOperationException(
+            "OverseerHostFixture not initialized — the test's ctor must call UseAuthority() first.");
+
     public Action<long, string> OnKick { get; set; } = (_, _) => { };
 
-    public void UseAuthority(Uri uri) => _authority = uri;
-
-    public async Task InitializeAsync()
+    /// <summary>
+    /// Synchronously builds the DI graph + HttpHost against the given authority URI.
+    /// Call this from the test class ctor BEFORE any test method runs.
+    /// Idempotent — subsequent calls are no-ops if the host is already started.
+    /// </summary>
+    public void UseAuthority(Uri uri, string apiKey)
     {
-        if (_authority is null)
-            return; // Caller must invoke UseAuthority before tests run.
+        _initLock.Wait();
+        try
+        {
+            if (_started) return;
+            StartAsync(uri, apiKey).GetAwaiter().GetResult();
+            _started = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
 
+    private async Task StartAsync(Uri authority, string apiKey)
+    {
         var tempDir = Path.Combine(Path.GetTempPath(), $"lockoverseer_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var inMemoryConfig = new Dictionary<string, string?>
         {
-            ["AuthorityApi:BaseUrl"] = _authority.ToString(),
-            ["AuthorityApi:ApiKey"] = "integration-test",
+            ["AuthorityApi:BaseUrl"] = authority.ToString(),
+            ["AuthorityApi:ApiKey"] = apiKey,
             ["AuthorityApi:TimeoutMs"] = "5000",
             ["AuthorityApi:RetryCount"] = "1",
             ["Cache:ReconcileIntervalSeconds"] = "300",
-            ["Http:Enabled"] = "false", // we start HttpHost manually
+            ["Http:Enabled"] = "false",
         };
         var cfg = new ConfigurationBuilder().AddInMemoryCollection(inMemoryConfig).Build();
 
@@ -53,11 +75,9 @@ public sealed class OverseerHostFixture : IAsyncLifetime
             PluginServices.AddLockOverseerCore(services, cfg, tempDir);
         });
         _host = builder.Build();
-        await _host.StartAsync();
+        await _host.StartAsync().ConfigureAwait(false);
+        _service = _host.Services.GetRequiredService<ILockOverseerService>();
 
-        Service = _host.Services.GetRequiredService<ILockOverseerService>();
-
-        // Start an HTTP host exposing plugin endpoints (bans/mutes only for now)
         _httpHost = new HttpHost(new HttpHostOptions
         {
             Enabled = true,
@@ -67,20 +87,22 @@ public sealed class OverseerHostFixture : IAsyncLifetime
         }, configure: app =>
         {
             HealthEndpoints.Map(app);
-            BanEndpoints.Map(app, Service);
-            MuteEndpoints.Map(app, Service);
-            RoleEndpoints.Map(app, Service);
-            FlagEndpoints.Map(app, Service);
-            PlayerEndpoints.Map(app, Service);
-            AuditEndpoints.Map(app, Service);
+            BanEndpoints.Map(app, _service);
+            MuteEndpoints.Map(app, _service);
+            RoleEndpoints.Map(app, _service);
+            FlagEndpoints.Map(app, _service);
+            PlayerEndpoints.Map(app, _service);
+            AuditEndpoints.Map(app, _service);
         });
-        await ((IHostedService)_httpHost).StartAsync(CancellationToken.None);
+        await ((IHostedService)_httpHost).StartAsync(CancellationToken.None).ConfigureAwait(false);
     }
+
+    public Task InitializeAsync() => Task.CompletedTask; // Deferred to UseAuthority.
 
     public async Task ForceReconcileAsync()
     {
         var reconcile = _host!.Services.GetRequiredService<ReconcileService>();
-        await reconcile.ReconcileOnceAsync(CancellationToken.None);
+        await reconcile.ReconcileOnceAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     public HttpClient CreatePluginHttpClient()
@@ -93,12 +115,12 @@ public sealed class OverseerHostFixture : IAsyncLifetime
     {
         if (_httpHost is not null)
         {
-            await ((IHostedService)_httpHost).StopAsync(CancellationToken.None);
-            await _httpHost.DisposeAsync();
+            await ((IHostedService)_httpHost).StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await _httpHost.DisposeAsync().ConfigureAwait(false);
         }
         if (_host is not null)
         {
-            await _host.StopAsync();
+            await _host.StopAsync().ConfigureAwait(false);
             _host.Dispose();
         }
     }
