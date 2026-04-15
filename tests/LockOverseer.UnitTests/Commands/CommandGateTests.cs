@@ -34,4 +34,30 @@ public sealed class CommandGateTests
         gate.RequireFlag(42, "overseer.ban").ShouldBeTrue();
         dms.ShouldBeEmpty();
     }
+
+    [Fact]
+    public void Cannot_act_on_peer_of_equal_priority()
+    {
+        var svc = Substitute.For<ILockOverseerService>();
+        svc.GetRolePriority(100).Returns(50);
+        svc.GetRolePriority(200).Returns(50);
+        var dms = new List<string>();
+        var gate = new CommandGate(svc, (_, msg) => dms.Add(msg));
+
+        gate.AssertOutranks(caller: 100, target: 200).ShouldBeFalse();
+        dms.ShouldContain("Cannot act on peer/superior");
+    }
+
+    [Fact]
+    public void Strictly_higher_priority_passes()
+    {
+        var svc = Substitute.For<ILockOverseerService>();
+        svc.GetRolePriority(100).Returns(100);
+        svc.GetRolePriority(200).Returns(50);
+        var dms = new List<string>();
+        var gate = new CommandGate(svc, (_, msg) => dms.Add(msg));
+
+        gate.AssertOutranks(100, 200).ShouldBeTrue();
+        dms.ShouldBeEmpty();
+    }
 }

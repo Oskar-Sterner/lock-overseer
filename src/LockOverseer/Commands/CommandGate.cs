@@ -21,4 +21,16 @@ public sealed class CommandGate
         _dm(callerSteamId, $"Permission denied (requires `{flag}`)");
         return false;
     }
+
+    public bool AssertOutranks(long caller, long target)
+    {
+        var callerPri = _service.GetRolePriority(caller);
+        var targetPri = _service.GetRolePriority(target);
+        if (targetPri >= callerPri)
+        {
+            _dm(caller, "Cannot act on peer/superior");
+            return false;
+        }
+        return true;
+    }
 }
