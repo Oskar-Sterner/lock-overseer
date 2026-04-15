@@ -54,4 +54,29 @@ public sealed class EndpointsSmokeTests
         ((int)r.StatusCode).ShouldBe(201);
         await app.StopAsync();
     }
+
+    [Fact]
+    public async Task Post_role_creates_assignment()
+    {
+        var svc = NSubstitute.Substitute.For<LockOverseer.Contracts.ILockOverseerService>();
+        svc.GrantRoleAsync(NSubstitute.Arg.Any<LockOverseer.Contracts.Models.Requests.RoleGrantRequest>(),
+                NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(LockOverseer.Contracts.Result<LockOverseer.Contracts.Models.RoleAssignment>.Ok(
+                new LockOverseer.Contracts.Models.RoleAssignment(5, 1, "mod",
+                    System.DateTimeOffset.UtcNow, null, null,
+                    new LockOverseer.Contracts.Models.Issuer(null, "http"))));
+
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        var app = builder.Build();
+        RoleEndpoints.Map(app, svc);
+        await app.StartAsync();
+
+        var client = app.GetTestClient();
+        var r = await client.PostAsJsonAsync("/v1/players/1/roles",
+            new { roleName = "mod", assignedByLabel = "test" });
+
+        ((int)r.StatusCode).ShouldBe(201);
+        await app.StopAsync();
+    }
 }
