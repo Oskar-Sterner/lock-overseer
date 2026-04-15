@@ -47,4 +47,12 @@ public sealed class InfoCommands
         _dm(callerSteamId, "  /whois <player>                         (requires overseer.info)");
         _dm(callerSteamId, "  /overseer status|reload|help            (requires overseer.admin)");
     }
+
+    [RequireFlag("overseer.admin")]
+    public void HandleStatus(long callerSteamId)
+    {
+        if (!_gate.RequireFlag(callerSteamId, "overseer.admin")) return;
+        foreach (var line in _status().Split('\n'))
+            _dm(callerSteamId, line);
+    }
 }
