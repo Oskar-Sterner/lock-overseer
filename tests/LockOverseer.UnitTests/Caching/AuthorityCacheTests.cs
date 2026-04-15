@@ -70,4 +70,19 @@ public sealed class AuthorityCacheTests
         c.IsBanned(2).ShouldBeFalse();
         c.IsBanned(3).ShouldBeTrue();
     }
+
+    [Fact]
+    public void ReplaceActiveBans_truncates_when_ceiling_exceeded()
+    {
+        var cfg = new LockOverseerConfig();
+        cfg.Cache.MaxActiveBans = 2;
+        var c = Build(cfg: cfg);
+        c.ReplaceActiveBans(new[]
+        {
+            new Ban(1,1,null,DateTimeOffset.UnixEpoch,null,null,new Issuer(null,"sys"),null),
+            new Ban(2,2,null,DateTimeOffset.UnixEpoch,null,null,new Issuer(null,"sys"),null),
+            new Ban(3,3,null,DateTimeOffset.UnixEpoch,null,null,new Issuer(null,"sys"),null),
+        });
+        c.SnapshotActiveBans().Count.ShouldBe(2);
+    }
 }
