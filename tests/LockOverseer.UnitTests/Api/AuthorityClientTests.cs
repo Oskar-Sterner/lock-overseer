@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using LockOverseer.Api;
 using LockOverseer.Config;
 using LockOverseer.Contracts;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Shouldly;
@@ -133,6 +135,39 @@ public sealed class AuthorityClientTests
         r.IsSuccess.ShouldBeTrue();
         method.ShouldBe("DELETE");
         key.ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Retries_on_503_with_stable_idempotency_key()
+    {
+        int calls = 0;
+        var seenKeys = new System.Collections.Generic.List<string>();
+        var handler = new FakeHandler((req, _) =>
+        {
+            calls++;
+            if (req.Headers.TryGetValues("Idempotency-Key", out var v)) seenKeys.Add(System.Linq.Enumerable.First(v));
+            if (calls < 3) return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            return FakeHandler.Json(HttpStatusCode.Created, """
+                {"id":1,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
+                 "issued_by":{"steam_id":null,"label":"chat"},"revoked_by":null}
+                """);
+        });
+
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddLogging();
+        services.Configure<LockOverseerConfig>(_ => { });
+        LockOverseer.Bootstrap.PluginServices.AddAuthorityClient(services, handler, new Uri("http://authority/"));
+        var sp = services.BuildServiceProvider();
+        var client = sp.GetRequiredService<IAuthorityClient>();
+
+        var ban = new LockOverseer.Api.Dto.BanResource(
+            0, 1, "x", DateTimeOffset.UtcNow, null, null,
+            new LockOverseer.Api.Dto.IssuerResource(null, "chat"), null);
+        var r = await client.IssueBanAsync(ban, CancellationToken.None);
+
+        r.IsSuccess.ShouldBeTrue();
+        calls.ShouldBe(3);
+        seenKeys.Distinct().Count().ShouldBe(1, "idempotency key must be reused across retries");
     }
 }
 
