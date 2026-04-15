@@ -39,4 +39,35 @@ public sealed class AuthorityCacheTests
         });
         c.IsBanned(42).ShouldBeTrue();
     }
+
+    [Fact]
+    public void IsBanned_returns_false_once_fake_clock_passes_expires_at()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-04-15T00:00:00Z"));
+        var c = Build(time);
+        c.UpsertActiveBan(new Ban(1, 42, null,
+            IssuedAt: time.GetUtcNow(),
+            ExpiresAt: time.GetUtcNow().AddMinutes(5),
+            RevokedAt: null,
+            IssuedBy: new Issuer(null, "sys"), RevokedBy: null));
+        c.IsBanned(42).ShouldBeTrue();
+        time.Advance(TimeSpan.FromMinutes(6));
+        c.IsBanned(42).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void SweepExpired_removes_revoked_and_expired_rows()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-04-15T00:00:00Z"));
+        var c = Build(time);
+        c.UpsertActiveBan(new Ban(1, 1, null, time.GetUtcNow(), time.GetUtcNow().AddMinutes(1), null, new Issuer(null, "sys"), null));
+        c.UpsertActiveBan(new Ban(2, 2, null, time.GetUtcNow(), null, time.GetUtcNow(), new Issuer(null, "sys"), null));
+        c.UpsertActiveBan(new Ban(3, 3, null, time.GetUtcNow(), null, null, new Issuer(null, "sys"), null));
+
+        time.Advance(TimeSpan.FromMinutes(2));
+        c.SweepExpired().ShouldBe(2);
+        c.IsBanned(1).ShouldBeFalse();
+        c.IsBanned(2).ShouldBeFalse();
+        c.IsBanned(3).ShouldBeTrue();
+    }
 }
