@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LockOverseer.Api;
@@ -56,5 +57,27 @@ public sealed class LockOverseerServiceTests
         var r = await sut.IssueBanAsync(new BanRequest(42, null, "spam", new Issuer(null, "chat")));
         r.IsSuccess.ShouldBeFalse();
         cache.IsBanned(42).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Concurrent_IssueBan_for_same_steamid_are_serialized()
+    {
+        var (sut, client, _) = Build();
+        int inFlight = 0, maxInFlight = 0;
+        client.IssueBanAsync(Arg.Any<BanResource>(), Arg.Any<CancellationToken>()).Returns(async _ =>
+        {
+            var n = Interlocked.Increment(ref inFlight);
+            maxInFlight = Math.Max(maxInFlight, n);
+            await Task.Delay(30);
+            Interlocked.Decrement(ref inFlight);
+            return Result<BanResource>.Ok(new BanResource(1, 42, null,
+                DateTimeOffset.UnixEpoch, null, null, new IssuerResource(null, "chat"), null));
+        });
+
+        var tasks = Enumerable.Range(0, 5).Select(_ =>
+            sut.IssueBanAsync(new BanRequest(42, null, "x", new Issuer(null, "chat"))).AsTask()).ToArray();
+        await Task.WhenAll(tasks);
+
+        maxInFlight.ShouldBe(1);
     }
 }
