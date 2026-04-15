@@ -36,4 +36,27 @@ public sealed class BanCommandsTests
             r.IssuedBy.SteamId == 100 &&
             r.IssuedBy.Label == "chat"));
     }
+
+    [Fact]
+    public async Task Unban_looks_up_active_ban_and_revokes()
+    {
+        var svc = Substitute.For<ILockOverseerService>();
+        svc.HasFlag(100, "overseer.ban").Returns(true);
+        svc.GetRolePriority(100).Returns(100);
+        svc.GetRolePriority(76561198000000999).Returns(0);
+        svc.GetActiveBanIdAsync(76561198000000999).Returns(ValueTask.FromResult<long?>(77));
+        svc.RevokeBanAsync(77, Arg.Any<RevokeRequest>()).Returns(Result<Ban>.Ok(
+            new Ban(77, 76561198000000999, null, DateTimeOffset.UtcNow, null, DateTimeOffset.UtcNow,
+                    new Issuer(100, "chat"), new Issuer(100, "chat"))));
+
+        var dms = new List<string>();
+        var gate = new CommandGate(svc, (_, m) => dms.Add(m));
+        var resolver = new PlayerResolver(() => Array.Empty<ResolverCandidate>());
+        var cmds = new BanCommands(svc, gate, resolver, (_, m) => dms.Add(m));
+
+        await cmds.HandleUnbanAsync(100, new[] { "76561198000000999", "appeal", "accepted" });
+
+        await svc.Received(1).RevokeBanAsync(77, Arg.Is<RevokeRequest>(r =>
+            r.Reason == "appeal accepted" && r.RevokedBy.Label == "chat"));
+    }
 }

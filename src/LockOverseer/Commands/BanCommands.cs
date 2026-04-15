@@ -54,4 +54,37 @@ public sealed class BanCommands
             ? $"Banned {target.SteamId} ({(minutes is null ? "perm" : minutes + "m")})"
             : $"Ban failed: {result.Error!.Message}");
     }
+
+    [RequireFlag("overseer.ban")]
+    public async Task HandleUnbanAsync(long callerSteamId, IReadOnlyList<string> args)
+    {
+        if (!_gate.RequireFlag(callerSteamId, "overseer.ban")) return;
+        if (args.Count < 1)
+        {
+            _dm(callerSteamId, "Usage: /unban <steam64|#slot|name> [reason...]");
+            return;
+        }
+
+        var target = _resolver.Resolve(args[0]);
+        if (target.Kind != ResolverResultKind.Resolved)
+        {
+            _dm(callerSteamId, "Player not found");
+            return;
+        }
+
+        if (!_gate.AssertOutranks(callerSteamId, target.SteamId)) return;
+
+        var banId = await _svc.GetActiveBanIdAsync(target.SteamId).ConfigureAwait(false);
+        if (banId is null)
+        {
+            _dm(callerSteamId, "No active ban for that player");
+            return;
+        }
+
+        var reason = ReasonParser.JoinReason(args.Skip(1).ToArray());
+        var result = await _svc.RevokeBanAsync(banId.Value,
+            new RevokeRequest(reason, new Issuer(callerSteamId, "chat"))).ConfigureAwait(false);
+
+        _dm(callerSteamId, result.IsSuccess ? "Unbanned." : $"Unban failed: {result.Error!.Message}");
+    }
 }
