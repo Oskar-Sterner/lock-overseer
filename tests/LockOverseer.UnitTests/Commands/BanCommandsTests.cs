@@ -1,0 +1,39 @@
+using LockOverseer.Commands;
+using LockOverseer.Contracts;
+using LockOverseer.Contracts.Models;
+using LockOverseer.Contracts.Models.Requests;
+using NSubstitute;
+using Shouldly;
+using Xunit;
+
+namespace LockOverseer.UnitTests.Commands;
+
+public sealed class BanCommandsTests
+{
+    [Fact]
+    public async Task Ban_issues_via_service_with_actor_and_reason()
+    {
+        var svc = Substitute.For<ILockOverseerService>();
+        svc.HasFlag(100, "overseer.ban").Returns(true);
+        svc.GetRolePriority(100).Returns(100);
+        svc.GetRolePriority(76561198000000999).Returns(0);
+        svc.IssueBanAsync(Arg.Any<BanRequest>()).Returns(Result<Ban>.Ok(
+            new Ban(1, 76561198000000999, "griefing", DateTimeOffset.UtcNow, null, null,
+                    new Issuer(100, "chat"), null)));
+
+        var dms = new List<string>();
+        var gate = new CommandGate(svc, (_, msg) => dms.Add(msg));
+        var resolver = new PlayerResolver(() => Array.Empty<ResolverCandidate>());
+        var cmds = new BanCommands(svc, gate, resolver, (_, msg) => dms.Add(msg));
+
+        await cmds.HandleBanAsync(callerSteamId: 100,
+                                   args: new[] { "76561198000000999", "perm", "griefing" });
+
+        await svc.Received(1).IssueBanAsync(Arg.Is<BanRequest>(r =>
+            r.SteamId == 76561198000000999L &&
+            r.DurationMinutes == null &&
+            r.Reason == "griefing" &&
+            r.IssuedBy.SteamId == 100 &&
+            r.IssuedBy.Label == "chat"));
+    }
+}
