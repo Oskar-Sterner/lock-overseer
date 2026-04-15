@@ -67,6 +67,32 @@ public sealed class AuthorityClientTests
         var r = await sut.GetActiveBansAsync(CancellationToken.None);
         r.Error!.Kind.ShouldBe(AuthorityErrorKind.Unreachable);
     }
+
+    [Fact]
+    public async Task IssueBanAsync_sends_Idempotency_Key_header_as_uuidv7()
+    {
+        string? seenKey = null;
+        var handler = new FakeHandler((req, _) =>
+        {
+            seenKey = req.Headers.TryGetValues("Idempotency-Key", out var v) ? System.Linq.Enumerable.First(v) : null;
+            return FakeHandler.Json(HttpStatusCode.Created, """
+                {"id":9,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
+                 "issued_by":{"steam_id":null,"label":"chat"},"revoked_by":null}
+                """);
+        });
+
+        var sut = Build(handler);
+        var req = new LockOverseer.Api.Dto.BanResource(
+            0, 1, "x",
+            DateTimeOffset.UtcNow, null, null,
+            new LockOverseer.Api.Dto.IssuerResource(null, "chat"), null);
+        var r = await sut.IssueBanAsync(req, CancellationToken.None);
+
+        r.IsSuccess.ShouldBeTrue();
+        seenKey.ShouldNotBeNull();
+        Guid.TryParse(seenKey, out var parsed).ShouldBeTrue();
+        ((parsed.ToByteArray()[7] & 0xF0) >> 4).ShouldBe(7); // version 7
+    }
 }
 
 internal sealed class FakeHandler : HttpMessageHandler

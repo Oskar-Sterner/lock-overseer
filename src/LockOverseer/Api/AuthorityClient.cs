@@ -90,7 +90,28 @@ public sealed partial class AuthorityClient : IAuthorityClient
     public ValueTask<Result<PlayerResource>> AddPlaytimeAsync(long steamId, long seconds, CancellationToken ct = default) => throw new NotImplementedException();
     public ValueTask<Result<IReadOnlyList<MuteResource>>> GetActiveMutesAsync(CancellationToken ct = default) => throw new NotImplementedException();
     public ValueTask<Result<IReadOnlyList<RoleResource>>> GetRolesAsync(CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default) => throw new NotImplementedException();
+    public async ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default)
+        => await PostAsync<BanResource, BanResource>("/bans", request, ct).ConfigureAwait(false);
+
+    private async ValueTask<Result<TResp>> PostAsync<TReq, TResp>(string path, TReq body, CancellationToken ct, string? idempotencyKey = null)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, path)
+            {
+                Content = JsonContent.Create(body, options: JsonDefaults.Options)
+            };
+            ApplyAuth(req);
+            req.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey ?? UuidV7.NewId().ToString());
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            return await DeserializeAsync<TResp>(resp, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            _log.LogWarning(ex, "[LockOverseer.Authority] POST {Path} unreachable", path);
+            return Result<TResp>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, ex.Message));
+        }
+    }
     public ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
     public ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default) => throw new NotImplementedException();
     public ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
