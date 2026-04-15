@@ -25,4 +25,12 @@ public interface ILockOverseerService
     ValueTask<Result<RoleAssignment>> RevokeRoleAsync(long assignmentId, RevokeRequest r, CancellationToken ct = default);
     ValueTask<Result<FlagAssignment>> GrantFlagAsync(FlagGrantRequest r, CancellationToken ct = default);
     ValueTask<Result<FlagAssignment>> RevokeFlagAsync(long assignmentId, RevokeRequest r, CancellationToken ct = default);
+
+    // Helper lookups used by chat-command implementations.
+    int GetRolePriority(long steamId);
+    ValueTask<long?> GetActiveBanIdAsync(long steamId, CancellationToken ct = default);
+    ValueTask<long?> GetActiveMuteIdAsync(long steamId, CancellationToken ct = default);
+    ValueTask<long?> GetActiveRoleAssignmentIdAsync(long steamId, CancellationToken ct = default);
+    ValueTask<long?> GetActiveFlagAssignmentIdAsync(long steamId, string flag, CancellationToken ct = default);
+    ValueTask<IReadOnlyList<AuditEntry>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default);
 }

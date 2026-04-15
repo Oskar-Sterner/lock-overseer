@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using LockOverseer.Api.Dto;
 using LockOverseer.Contracts;
+using LockOverseer.Contracts.Models;
 
 namespace LockOverseer.Api;
 
@@ -28,4 +29,9 @@ public interface IAuthorityClient
 
     ValueTask<Result<IReadOnlyList<RoleAssignmentResource>>> GetPlayerRolesAsync(long steamId, CancellationToken ct = default);
     ValueTask<Result<IReadOnlyList<FlagAssignmentResource>>> GetPlayerFlagsAsync(long steamId, CancellationToken ct = default);
+
+    // Phase C helper lookups.
+    ValueTask<Result<RoleAssignment>> GetActiveRoleAssignmentAsync(long steamId, CancellationToken ct = default);
+    ValueTask<Result<FlagAssignment>> GetActiveFlagAssignmentAsync(long steamId, string flag, CancellationToken ct = default);
+    ValueTask<Result<IReadOnlyList<AuditEntry>>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default);
 }

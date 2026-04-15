@@ -94,6 +94,37 @@ public sealed class AuthorityCache
     public IReadOnlyCollection<Mute> SnapshotActiveMutes() => _activeMutes.Values.ToArray();
     public int ConnectedCount => _connected.Count;
 
+    // Phase C helper accessors.
+    public string? GetConnectedRole(long steamId) =>
+        _connected.TryGetValue(steamId, out var s) ? s.RoleName : null;
+
+    public int? GetRolePriority(string roleName) =>
+        _roles.TryGetValue(roleName, out var def) ? def.Priority : (int?)null;
+
+    public bool TryGetActiveBan(long steamId, out Ban ban)
+    {
+        if (_activeBans.TryGetValue(steamId, out var row) && row.RevokedAt is null &&
+            (row.ExpiresAt is null || row.ExpiresAt > _time.GetUtcNow()))
+        {
+            ban = row;
+            return true;
+        }
+        ban = default!;
+        return false;
+    }
+
+    public bool TryGetActiveMute(long steamId, out Mute mute)
+    {
+        if (_activeMutes.TryGetValue(steamId, out var row) && row.RevokedAt is null &&
+            (row.ExpiresAt is null || row.ExpiresAt > _time.GetUtcNow()))
+        {
+            mute = row;
+            return true;
+        }
+        mute = default!;
+        return false;
+    }
+
     // Called every ExpirySweepSeconds by ReconcileService.
     public int SweepExpired()
     {

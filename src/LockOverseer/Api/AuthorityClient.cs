@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using LockOverseer.Api.Dto;
 using LockOverseer.Config;
 using LockOverseer.Contracts;
+using LockOverseer.Contracts.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -161,6 +162,34 @@ public sealed partial class AuthorityClient : IAuthorityClient
     {
         var r = await GetAsync<PagedEnvelope<FlagAssignmentResource>>($"/players/{steamId}/flags", ct).ConfigureAwait(false);
         return r.IsSuccess ? Result<IReadOnlyList<FlagAssignmentResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<FlagAssignmentResource>>.Fail(r.Error!);
+    }
+
+    public async ValueTask<Result<RoleAssignment>> GetActiveRoleAssignmentAsync(long steamId, CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<RoleAssignmentResource>>($"/players/{steamId}/roles?active=true&page_size=1", ct).ConfigureAwait(false);
+        if (!r.IsSuccess) return Result<RoleAssignment>.Fail(r.Error!);
+        var items = r.Value!.Items;
+        if (items.Count == 0) return Result<RoleAssignment>.Fail(new AuthorityError(AuthorityErrorKind.NotFound, "no active role"));
+        var a = items[0];
+        return Result<RoleAssignment>.Ok(new RoleAssignment(a.Id, a.SteamId, a.RoleName, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBy.SteamId, a.AssignedBy.Label)));
+    }
+
+    public async ValueTask<Result<FlagAssignment>> GetActiveFlagAssignmentAsync(long steamId, string flag, CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<FlagAssignmentResource>>($"/players/{steamId}/flags?flag={System.Uri.EscapeDataString(flag)}&active=true&page_size=1", ct).ConfigureAwait(false);
+        if (!r.IsSuccess) return Result<FlagAssignment>.Fail(r.Error!);
+        var items = r.Value!.Items;
+        if (items.Count == 0) return Result<FlagAssignment>.Fail(new AuthorityError(AuthorityErrorKind.NotFound, "no active flag"));
+        var a = items[0];
+        return Result<FlagAssignment>.Ok(new FlagAssignment(a.Id, a.SteamId, a.Flag, a.AssignedAt, a.ExpiresAt, a.RevokedAt, new Issuer(a.AssignedBy.SteamId, a.AssignedBy.Label)));
+    }
+
+    public async ValueTask<Result<IReadOnlyList<AuditEntry>>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<AuditEntry>>($"/audit?page={page}&page_size={pageSize}", ct).ConfigureAwait(false);
+        return r.IsSuccess
+            ? Result<IReadOnlyList<AuditEntry>>.Ok(r.Value!.Items)
+            : Result<IReadOnlyList<AuditEntry>>.Fail(r.Error!);
     }
 
     private async ValueTask<Result<TResp>> DeleteAsync<TResp>(string path, object? body, CancellationToken ct)

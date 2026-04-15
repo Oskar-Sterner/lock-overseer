@@ -143,6 +143,41 @@ public sealed class LockOverseerService : ILockOverseerService
             : Result<FlagAssignment>.Fail(api.Error!);
     }
 
+    public int GetRolePriority(long steamId)
+    {
+        var role = _cache.GetConnectedRole(steamId);
+        if (role is null) return 0;
+        return _cache.GetRolePriority(role) ?? 0;
+    }
+
+    public ValueTask<long?> GetActiveBanIdAsync(long steamId, CancellationToken ct = default)
+    {
+        return ValueTask.FromResult(_cache.TryGetActiveBan(steamId, out var ban) ? ban.Id : (long?)null);
+    }
+
+    public ValueTask<long?> GetActiveMuteIdAsync(long steamId, CancellationToken ct = default)
+    {
+        return ValueTask.FromResult(_cache.TryGetActiveMute(steamId, out var mute) ? mute.Id : (long?)null);
+    }
+
+    public async ValueTask<long?> GetActiveRoleAssignmentIdAsync(long steamId, CancellationToken ct = default)
+    {
+        var result = await _client.GetActiveRoleAssignmentAsync(steamId, ct).ConfigureAwait(false);
+        return result.IsSuccess ? result.Value!.Id : null;
+    }
+
+    public async ValueTask<long?> GetActiveFlagAssignmentIdAsync(long steamId, string flag, CancellationToken ct = default)
+    {
+        var result = await _client.GetActiveFlagAssignmentAsync(steamId, flag, ct).ConfigureAwait(false);
+        return result.IsSuccess ? result.Value!.Id : null;
+    }
+
+    public async ValueTask<IReadOnlyList<AuditEntry>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default)
+    {
+        var result = await _client.GetAuditAsync(page, pageSize, ct).ConfigureAwait(false);
+        return result.IsSuccess ? result.Value! : Array.Empty<AuditEntry>();
+    }
+
     // --- mappers ---
     private static Ban ToModel(BanResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
     private static Mute ToModel(MuteResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
