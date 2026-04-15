@@ -84,12 +84,6 @@ public sealed partial class AuthorityClient : IAuthorityClient
         return Result<T>.Fail(new AuthorityError(kind, $"HTTP {(int)resp.StatusCode}", detail));
     }
 
-    // Stubs for unimplemented methods (filled in next tasks).
-    public ValueTask<Result<PlayerResource>> GetPlayerAsync(long steamId, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<PlayerResource>> UpsertPlayerAsync(long steamId, string? lastKnownName, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<PlayerResource>> AddPlaytimeAsync(long steamId, long seconds, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<IReadOnlyList<MuteResource>>> GetActiveMutesAsync(CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<IReadOnlyList<RoleResource>>> GetRolesAsync(CancellationToken ct = default) => throw new NotImplementedException();
     public async ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default)
         => await PostAsync<BanResource, BanResource>("/bans", request, ct).ConfigureAwait(false);
 
@@ -112,13 +106,78 @@ public sealed partial class AuthorityClient : IAuthorityClient
             return Result<TResp>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, ex.Message));
         }
     }
-    public ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<RoleAssignmentResource>> GrantRoleAsync(long steamId, string roleName, int? durationMinutes, IssuerResource assignedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<RoleAssignmentResource>> RevokeRoleAsync(long assignmentId, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<FlagAssignmentResource>> GrantFlagAsync(long steamId, string flag, int? durationMinutes, IssuerResource assignedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<FlagAssignmentResource>> RevokeFlagAsync(long assignmentId, IssuerResource revokedBy, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<IReadOnlyList<RoleAssignmentResource>>> GetPlayerRolesAsync(long steamId, CancellationToken ct = default) => throw new NotImplementedException();
-    public ValueTask<Result<IReadOnlyList<FlagAssignmentResource>>> GetPlayerFlagsAsync(long steamId, CancellationToken ct = default) => throw new NotImplementedException();
+
+    public ValueTask<Result<PlayerResource>> GetPlayerAsync(long steamId, CancellationToken ct = default)
+        => GetAsync<PlayerResource>($"/players/{steamId}", ct);
+
+    public ValueTask<Result<PlayerResource>> UpsertPlayerAsync(long steamId, string? lastKnownName, CancellationToken ct = default)
+        => PostAsync<object, PlayerResource>($"/players/{steamId}", new { last_known_name = lastKnownName }, ct);
+
+    public ValueTask<Result<PlayerResource>> AddPlaytimeAsync(long steamId, long seconds, CancellationToken ct = default)
+        => PostAsync<object, PlayerResource>($"/players/{steamId}/playtime", new { seconds }, ct);
+
+    public async ValueTask<Result<IReadOnlyList<MuteResource>>> GetActiveMutesAsync(CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<MuteResource>>("/mutes?active=true&page_size=1000", ct).ConfigureAwait(false);
+        return r.IsSuccess ? Result<IReadOnlyList<MuteResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<MuteResource>>.Fail(r.Error!);
+    }
+
+    public async ValueTask<Result<IReadOnlyList<RoleResource>>> GetRolesAsync(CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<RoleResource>>("/roles?page_size=1000", ct).ConfigureAwait(false);
+        return r.IsSuccess ? Result<IReadOnlyList<RoleResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<RoleResource>>.Fail(r.Error!);
+    }
+
+    public ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default)
+        => DeleteAsync<BanResource>($"/bans/{banId}", new { reason, revoked_by = revokedBy }, ct);
+
+    public ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default)
+        => PostAsync<MuteResource, MuteResource>("/mutes", request, ct);
+
+    public ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default)
+        => DeleteAsync<MuteResource>($"/mutes/{muteId}", new { reason, revoked_by = revokedBy }, ct);
+
+    public ValueTask<Result<RoleAssignmentResource>> GrantRoleAsync(long steamId, string roleName, int? durationMinutes, IssuerResource assignedBy, CancellationToken ct = default)
+        => PostAsync<object, RoleAssignmentResource>($"/players/{steamId}/roles",
+            new { role_name = roleName, duration_minutes = durationMinutes, assigned_by = assignedBy }, ct);
+
+    public ValueTask<Result<RoleAssignmentResource>> RevokeRoleAsync(long assignmentId, IssuerResource revokedBy, CancellationToken ct = default)
+        => DeleteAsync<RoleAssignmentResource>($"/role-assignments/{assignmentId}", new { revoked_by = revokedBy }, ct);
+
+    public ValueTask<Result<FlagAssignmentResource>> GrantFlagAsync(long steamId, string flag, int? durationMinutes, IssuerResource assignedBy, CancellationToken ct = default)
+        => PostAsync<object, FlagAssignmentResource>($"/players/{steamId}/flags",
+            new { flag, duration_minutes = durationMinutes, assigned_by = assignedBy }, ct);
+
+    public ValueTask<Result<FlagAssignmentResource>> RevokeFlagAsync(long assignmentId, IssuerResource revokedBy, CancellationToken ct = default)
+        => DeleteAsync<FlagAssignmentResource>($"/flag-assignments/{assignmentId}", new { revoked_by = revokedBy }, ct);
+
+    public async ValueTask<Result<IReadOnlyList<RoleAssignmentResource>>> GetPlayerRolesAsync(long steamId, CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<RoleAssignmentResource>>($"/players/{steamId}/roles", ct).ConfigureAwait(false);
+        return r.IsSuccess ? Result<IReadOnlyList<RoleAssignmentResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<RoleAssignmentResource>>.Fail(r.Error!);
+    }
+
+    public async ValueTask<Result<IReadOnlyList<FlagAssignmentResource>>> GetPlayerFlagsAsync(long steamId, CancellationToken ct = default)
+    {
+        var r = await GetAsync<PagedEnvelope<FlagAssignmentResource>>($"/players/{steamId}/flags", ct).ConfigureAwait(false);
+        return r.IsSuccess ? Result<IReadOnlyList<FlagAssignmentResource>>.Ok(r.Value!.Items) : Result<IReadOnlyList<FlagAssignmentResource>>.Fail(r.Error!);
+    }
+
+    private async ValueTask<Result<TResp>> DeleteAsync<TResp>(string path, object? body, CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Delete, path);
+            if (body is not null) req.Content = JsonContent.Create(body, options: JsonDefaults.Options);
+            ApplyAuth(req);
+            req.Headers.TryAddWithoutValidation("Idempotency-Key", UuidV7.NewId().ToString());
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            return await DeserializeAsync<TResp>(resp, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            _log.LogWarning(ex, "[LockOverseer.Authority] DELETE {Path} unreachable", path);
+            return Result<TResp>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, ex.Message));
+        }
+    }
 }

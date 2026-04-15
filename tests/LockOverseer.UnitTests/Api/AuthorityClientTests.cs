@@ -93,6 +93,47 @@ public sealed class AuthorityClientTests
         Guid.TryParse(seenKey, out var parsed).ShouldBeTrue();
         ((parsed.ToByteArray()[7] & 0xF0) >> 4).ShouldBe(7); // version 7
     }
+
+    [Fact]
+    public async Task GrantRoleAsync_posts_to_player_roles_endpoint()
+    {
+        string? path = null;
+        var handler = new FakeHandler((req, _) =>
+        {
+            path = req.RequestUri!.PathAndQuery;
+            return FakeHandler.Json(HttpStatusCode.Created, """
+                {"id":5,"steam_id":1,"role_name":"mod",
+                 "assigned_at":"2026-04-15T00:00:00Z","expires_at":null,"revoked_at":null,
+                 "assigned_by":{"steam_id":null,"label":"chat"}}
+                """);
+        });
+        var sut = Build(handler);
+        var r = await sut.GrantRoleAsync(1, "mod", 60,
+            new LockOverseer.Api.Dto.IssuerResource(null, "chat"), CancellationToken.None);
+        r.IsSuccess.ShouldBeTrue();
+        path.ShouldBe("/players/1/roles");
+    }
+
+    [Fact]
+    public async Task RevokeBanAsync_sends_DELETE_with_idempotency_key()
+    {
+        string? method = null; string? key = null;
+        var handler = new FakeHandler((req, _) =>
+        {
+            method = req.Method.Method;
+            key = req.Headers.TryGetValues("Idempotency-Key", out var v) ? System.Linq.Enumerable.First(v) : null;
+            return FakeHandler.Json(HttpStatusCode.OK, """
+                {"id":1,"steam_id":1,"reason":"x","issued_at":"2026-04-15T00:00:00Z","expires_at":null,
+                 "revoked_at":"2026-04-15T00:01:00Z","issued_by":{"steam_id":null,"label":"chat"},
+                 "revoked_by":{"steam_id":null,"label":"chat"}}
+                """);
+        });
+        var sut = Build(handler);
+        var r = await sut.RevokeBanAsync(1, "appeal", new LockOverseer.Api.Dto.IssuerResource(null, "chat"), default);
+        r.IsSuccess.ShouldBeTrue();
+        method.ShouldBe("DELETE");
+        key.ShouldNotBeNullOrEmpty();
+    }
 }
 
 internal sealed class FakeHandler : HttpMessageHandler
