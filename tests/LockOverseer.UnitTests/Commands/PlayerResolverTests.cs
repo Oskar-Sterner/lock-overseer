@@ -29,4 +29,31 @@ public sealed class PlayerResolverTests
 
         result.Kind.ShouldBe(ResolverResultKind.NotFound);
     }
+
+    [Fact]
+    public void Slot_token_resolves_connected_player()
+    {
+        var connected = new List<ResolverCandidate>
+        {
+            new(76561198000000001, 0, "Alice"),
+            new(76561198000000002, 3, "Bob"),
+        };
+        var resolver = new PlayerResolver(() => connected);
+
+        var result = resolver.Resolve("#3");
+
+        result.Kind.ShouldBe(ResolverResultKind.Resolved);
+        result.SteamId.ShouldBe(76561198000000002L);
+        result.Slot.ShouldBe(3);
+    }
+
+    [Fact]
+    public void Unknown_slot_is_not_found()
+    {
+        var resolver = new PlayerResolver(() => Array.Empty<ResolverCandidate>());
+
+        var result = resolver.Resolve("#7");
+
+        result.Kind.ShouldBe(ResolverResultKind.NotFound);
+    }
 }

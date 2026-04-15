@@ -27,6 +27,14 @@ public sealed class PlayerResolver
         if (token.Length == 17 && long.TryParse(token, out var steamId))
             return new ResolverResult(ResolverResultKind.Resolved, steamId, null, Array.Empty<ResolverCandidate>());
 
+        if (token.StartsWith('#') && int.TryParse(token.AsSpan(1), out var slot))
+        {
+            foreach (var c in _connected())
+                if (c.Slot == slot)
+                    return new ResolverResult(ResolverResultKind.Resolved, c.SteamId, slot, Array.Empty<ResolverCandidate>());
+            return new ResolverResult(ResolverResultKind.NotFound, 0, null, Array.Empty<ResolverCandidate>());
+        }
+
         return new ResolverResult(ResolverResultKind.NotFound, 0, null, Array.Empty<ResolverCandidate>());
     }
 }
