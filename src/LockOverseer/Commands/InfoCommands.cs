@@ -31,4 +31,20 @@ public sealed class InfoCommands
         _dm(callerSteamId, $"  mute: {(rec.ActiveMute is null ? "-" : $"id={rec.ActiveMute.Id} reason={rec.ActiveMute.Reason}")}");
         _dm(callerSteamId, $"  first={rec.FirstConnectAt:o} last={rec.LastConnectAt:o}");
     }
+
+    public void HandleHelp(long callerSteamId)
+    {
+        _dm(callerSteamId, "LockOverseer commands:");
+        _dm(callerSteamId, "  /ban <player> <minutes|perm> [reason]   (requires overseer.ban)");
+        _dm(callerSteamId, "  /unban <player> [reason]                (requires overseer.ban)");
+        _dm(callerSteamId, "  /mute <player> <minutes|perm> [reason]  (requires overseer.mute)");
+        _dm(callerSteamId, "  /unmute <player> [reason]               (requires overseer.mute)");
+        _dm(callerSteamId, "  /kick <player> [reason]                 (requires overseer.kick)");
+        _dm(callerSteamId, "  /role grant <player> <role> [dur]       (requires overseer.role)");
+        _dm(callerSteamId, "  /role revoke <player>                   (requires overseer.role)");
+        _dm(callerSteamId, "  /flag grant <player> <flag> [dur]       (requires overseer.flag)");
+        _dm(callerSteamId, "  /flag revoke <player> <flag>            (requires overseer.flag)");
+        _dm(callerSteamId, "  /whois <player>                         (requires overseer.info)");
+        _dm(callerSteamId, "  /overseer status|reload|help            (requires overseer.admin)");
+    }
 }

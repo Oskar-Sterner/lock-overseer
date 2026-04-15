@@ -33,4 +33,23 @@ public sealed class InfoCommandsTests
 
         dms.ShouldContain(m => m.Contains("Alice") && m.Contains("mod") && m.Contains("7200"));
     }
+
+    [Fact]
+    public void Help_lists_all_commands()
+    {
+        var svc = Substitute.For<ILockOverseerService>();
+        var dms = new List<string>();
+        var gate = new CommandGate(svc, (_, m) => dms.Add(m));
+        var resolver = new PlayerResolver(() => Array.Empty<ResolverCandidate>());
+        var cmds = new InfoCommands(svc, gate, resolver, (_, m) => dms.Add(m), () => "stub");
+
+        cmds.HandleHelp(100);
+
+        var text = string.Join('\n', dms);
+        text.ShouldContain("/ban");
+        text.ShouldContain("/mute");
+        text.ShouldContain("/role grant");
+        text.ShouldContain("/flag grant");
+        text.ShouldContain("/overseer status");
+    }
 }
