@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using LockOverseer.Api;
 using LockOverseer.Config;
+using LockOverseer.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Shouldly;
@@ -41,6 +42,30 @@ public sealed class AuthorityClientTests
         r.IsSuccess.ShouldBeTrue();
         r.Value!.Count.ShouldBe(1);
         r.Value[0].Id.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, AuthorityErrorKind.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden, AuthorityErrorKind.Unauthorized)]
+    [InlineData(HttpStatusCode.NotFound, AuthorityErrorKind.NotFound)]
+    [InlineData(HttpStatusCode.Conflict, AuthorityErrorKind.Conflict)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, AuthorityErrorKind.Validation)]
+    public async Task GetActiveBansAsync_maps_status_codes_to_error_kind(HttpStatusCode code, AuthorityErrorKind kind)
+    {
+        var handler = new FakeHandler((_, _) => new HttpResponseMessage(code) { Content = new StringContent("{\"detail\":\"x\"}") });
+        var sut = Build(handler);
+        var r = await sut.GetActiveBansAsync(CancellationToken.None);
+        r.IsSuccess.ShouldBeFalse();
+        r.Error!.Kind.ShouldBe(kind);
+    }
+
+    [Fact]
+    public async Task GetActiveBansAsync_returns_Unreachable_on_network_exception()
+    {
+        var handler = new FakeHandler((_, _) => throw new HttpRequestException("boom"));
+        var sut = Build(handler);
+        var r = await sut.GetActiveBansAsync(CancellationToken.None);
+        r.Error!.Kind.ShouldBe(AuthorityErrorKind.Unreachable);
     }
 }
 
