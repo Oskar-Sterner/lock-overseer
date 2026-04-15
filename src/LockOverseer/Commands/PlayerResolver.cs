@@ -35,6 +35,17 @@ public sealed class PlayerResolver
             return new ResolverResult(ResolverResultKind.NotFound, 0, null, Array.Empty<ResolverCandidate>());
         }
 
+        var players = _connected();
+        var prefixMatches = players
+            .Where(p => p.Name.StartsWith(token, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (prefixMatches.Length == 1)
+            return new ResolverResult(ResolverResultKind.Resolved, prefixMatches[0].SteamId, prefixMatches[0].Slot, Array.Empty<ResolverCandidate>());
+
+        if (prefixMatches.Length > 1)
+            return new ResolverResult(ResolverResultKind.Ambiguous, 0, null, prefixMatches);
+
         return new ResolverResult(ResolverResultKind.NotFound, 0, null, Array.Empty<ResolverCandidate>());
     }
 }

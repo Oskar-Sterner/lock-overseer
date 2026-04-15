@@ -56,4 +56,36 @@ public sealed class PlayerResolverTests
 
         result.Kind.ShouldBe(ResolverResultKind.NotFound);
     }
+
+    [Fact]
+    public void Unique_prefix_resolves()
+    {
+        var connected = new List<ResolverCandidate>
+        {
+            new(76561198000000010, 1, "Alice"),
+            new(76561198000000011, 2, "Bob"),
+        };
+        var resolver = new PlayerResolver(() => connected);
+
+        var result = resolver.Resolve("al");
+
+        result.Kind.ShouldBe(ResolverResultKind.Resolved);
+        result.SteamId.ShouldBe(76561198000000010L);
+    }
+
+    [Fact]
+    public void Ambiguous_prefix_returns_match_list()
+    {
+        var connected = new List<ResolverCandidate>
+        {
+            new(76561198000000010, 1, "Alice"),
+            new(76561198000000012, 2, "Alan"),
+        };
+        var resolver = new PlayerResolver(() => connected);
+
+        var result = resolver.Resolve("Al");
+
+        result.Kind.ShouldBe(ResolverResultKind.Ambiguous);
+        result.Matches.Select(m => m.Name).ShouldBe(new[] { "Alice", "Alan" }, ignoreOrder: true);
+    }
 }
