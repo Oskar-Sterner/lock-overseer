@@ -23,7 +23,7 @@ public sealed class PluginServicesTests
         var cfgDict = new Dictionary<string, string?>
         {
             ["AuthorityApi:BaseUrl"] = "http://127.0.0.1:8080",
-            ["AuthorityApi:ApiKey"]  = "k",
+            ["AuthorityApi:ApiKey"] = "k",
         };
         var cfg = new ConfigurationBuilder().AddInMemoryCollection(cfgDict).Build();
 

@@ -27,7 +27,7 @@ public sealed class LockOverseerService : ILockOverseerService
     }
 
     public bool IsBanned(long steamId) => _cache.IsBanned(steamId);
-    public bool IsMuted(long steamId)  => _cache.IsMuted(steamId);
+    public bool IsMuted(long steamId) => _cache.IsMuted(steamId);
     public bool HasFlag(long steamId, string flag) => _cache.HasFlag(steamId, flag);
     public string? GetRole(long steamId) => _cache.GetRole(steamId);
 
@@ -42,7 +42,7 @@ public sealed class LockOverseerService : ILockOverseerService
             p.ActiveMute is null ? null : ToModel(p.ActiveMute));
     }
 
-    public ValueTask<IReadOnlyList<Ban>>  GetActiveBansAsync(CancellationToken ct = default)
+    public ValueTask<IReadOnlyList<Ban>> GetActiveBansAsync(CancellationToken ct = default)
         => ValueTask.FromResult<IReadOnlyList<Ban>>(_cache.SnapshotActiveBans().ToArray());
     public ValueTask<IReadOnlyList<Mute>> GetActiveMutesAsync(CancellationToken ct = default)
         => ValueTask.FromResult<IReadOnlyList<Mute>>(_cache.SnapshotActiveMutes().ToArray());
@@ -144,7 +144,7 @@ public sealed class LockOverseerService : ILockOverseerService
     }
 
     // --- mappers ---
-    private static Ban  ToModel(BanResource r)  => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
+    private static Ban ToModel(BanResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
     private static Mute ToModel(MuteResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
     private static RoleAssignment ToModel(RoleAssignmentResource r) => new(r.Id, r.SteamId, r.RoleName, r.AssignedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.AssignedBy.SteamId, r.AssignedBy.Label));
     private static FlagAssignment ToModel(FlagAssignmentResource r) => new(r.Id, r.SteamId, r.Flag, r.AssignedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.AssignedBy.SteamId, r.AssignedBy.Label));

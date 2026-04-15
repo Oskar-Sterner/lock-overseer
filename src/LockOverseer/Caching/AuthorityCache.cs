@@ -16,7 +16,7 @@ public sealed class AuthorityCache
     private readonly LockOverseerConfig _cfg;
     private readonly ILogger<AuthorityCache> _log;
 
-    private readonly ConcurrentDictionary<long, Ban>  _activeBans  = new();
+    private readonly ConcurrentDictionary<long, Ban> _activeBans = new();
     private readonly ConcurrentDictionary<long, Mute> _activeMutes = new();
     private volatile ImmutableDictionary<string, RoleDefinition> _roles = ImmutableDictionary<string, RoleDefinition>.Empty;
     private readonly ConcurrentDictionary<long, ConnectedPlayerState> _connected = new();
@@ -28,7 +28,7 @@ public sealed class AuthorityCache
 
     // ---- Hot-path reads (lock-free). ----
     public bool IsBanned(long steamId) => IsActive(_activeBans, steamId, b => b.ExpiresAt, b => b.RevokedAt);
-    public bool IsMuted(long steamId)  => IsActive(_activeMutes, steamId, m => m.ExpiresAt, m => m.RevokedAt);
+    public bool IsMuted(long steamId) => IsActive(_activeMutes, steamId, m => m.ExpiresAt, m => m.RevokedAt);
 
     public string? GetRole(long steamId) =>
         _connected.TryGetValue(steamId, out var s) ? s.RoleName : null;
@@ -90,7 +90,7 @@ public sealed class AuthorityCache
     public void SetConnectedState(long steamId, ConnectedPlayerState state) => _connected[steamId] = state;
     public void ClearConnected(long steamId) => _connected.TryRemove(steamId, out _);
 
-    public IReadOnlyCollection<Ban>  SnapshotActiveBans()  => _activeBans.Values.ToArray();
+    public IReadOnlyCollection<Ban> SnapshotActiveBans() => _activeBans.Values.ToArray();
     public IReadOnlyCollection<Mute> SnapshotActiveMutes() => _activeMutes.Values.ToArray();
     public int ConnectedCount => _connected.Count;
 

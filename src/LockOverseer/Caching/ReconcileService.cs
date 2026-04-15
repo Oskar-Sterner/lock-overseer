@@ -35,7 +35,7 @@ public sealed class ReconcileService : BackgroundService
 
     public async Task ReconcileOnceAsync(CancellationToken ct)
     {
-        var bans  = await _client.GetActiveBansAsync(ct).ConfigureAwait(false);
+        var bans = await _client.GetActiveBansAsync(ct).ConfigureAwait(false);
         var mutes = await _client.GetActiveMutesAsync(ct).ConfigureAwait(false);
         var roles = await _client.GetRolesAsync(ct).ConfigureAwait(false);
 
@@ -87,6 +87,6 @@ public sealed class ReconcileService : BackgroundService
         }
     }
 
-    private static Ban  ToModel(BanResource r)  => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
+    private static Ban ToModel(BanResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
     private static Mute ToModel(MuteResource r) => new(r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt, new Issuer(r.IssuedBy.SteamId, r.IssuedBy.Label), r.RevokedBy is null ? null : new Issuer(r.RevokedBy.SteamId, r.RevokedBy.Label));
 }

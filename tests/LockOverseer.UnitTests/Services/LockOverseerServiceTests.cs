@@ -64,14 +64,14 @@ public sealed class LockOverseerServiceTests
     {
         var (sut, client, _) = Build();
         int inFlight = 0, maxInFlight = 0;
-        client.IssueBanAsync(Arg.Any<BanResource>(), Arg.Any<CancellationToken>()).Returns(async _ =>
+        client.IssueBanAsync(Arg.Any<BanResource>(), Arg.Any<CancellationToken>()).Returns(_ =>
         {
             var n = Interlocked.Increment(ref inFlight);
             maxInFlight = Math.Max(maxInFlight, n);
-            await Task.Delay(30);
+            Thread.Sleep(30);
             Interlocked.Decrement(ref inFlight);
-            return Result<BanResource>.Ok(new BanResource(1, 42, null,
-                DateTimeOffset.UnixEpoch, null, null, new IssuerResource(null, "chat"), null));
+            return new ValueTask<Result<BanResource>>(Result<BanResource>.Ok(new BanResource(1, 42, null,
+                DateTimeOffset.UnixEpoch, null, null, new IssuerResource(null, "chat"), null)));
         });
 
         var tasks = Enumerable.Range(0, 5).Select(_ =>

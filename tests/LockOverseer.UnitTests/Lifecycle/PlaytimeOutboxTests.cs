@@ -18,7 +18,7 @@ public sealed class PlaytimeOutboxTests
         {
             var a = new PlaytimeOutbox(tmp, NullLogger<PlaytimeOutbox>.Instance);
             await a.EnqueueAsync(1, 120, CancellationToken.None);
-            await a.EnqueueAsync(2, 45,  CancellationToken.None);
+            await a.EnqueueAsync(2, 45, CancellationToken.None);
 
             var b = new PlaytimeOutbox(tmp, NullLogger<PlaytimeOutbox>.Instance);
             var drained = await b.DrainAsync(CancellationToken.None);

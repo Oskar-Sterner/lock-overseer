@@ -12,12 +12,12 @@ public interface IAuthorityClient
     ValueTask<Result<PlayerResource>> UpsertPlayerAsync(long steamId, string? lastKnownName, CancellationToken ct = default);
     ValueTask<Result<PlayerResource>> AddPlaytimeAsync(long steamId, long seconds, CancellationToken ct = default);
 
-    ValueTask<Result<IReadOnlyList<BanResource>>>  GetActiveBansAsync(CancellationToken ct = default);
+    ValueTask<Result<IReadOnlyList<BanResource>>> GetActiveBansAsync(CancellationToken ct = default);
     ValueTask<Result<IReadOnlyList<MuteResource>>> GetActiveMutesAsync(CancellationToken ct = default);
     ValueTask<Result<IReadOnlyList<RoleResource>>> GetRolesAsync(CancellationToken ct = default);
 
-    ValueTask<Result<BanResource>>  IssueBanAsync(BanResource request, CancellationToken ct = default);
-    ValueTask<Result<BanResource>>  RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default);
+    ValueTask<Result<BanResource>> IssueBanAsync(BanResource request, CancellationToken ct = default);
+    ValueTask<Result<BanResource>> RevokeBanAsync(long banId, string? reason, IssuerResource revokedBy, CancellationToken ct = default);
     ValueTask<Result<MuteResource>> IssueMuteAsync(MuteResource request, CancellationToken ct = default);
     ValueTask<Result<MuteResource>> RevokeMuteAsync(long muteId, string? reason, IssuerResource revokedBy, CancellationToken ct = default);
 
