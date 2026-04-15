@@ -4,8 +4,14 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using LockOverseer.Api;
+using LockOverseer.Caching;
 using LockOverseer.Config;
+using LockOverseer.Contracts;
+using LockOverseer.Lifecycle;
+using LockOverseer.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
@@ -15,6 +21,35 @@ namespace LockOverseer.Bootstrap;
 
 public static class PluginServices
 {
+    public static IServiceCollection AddLockOverseerCore(
+        IServiceCollection services,
+        IConfiguration rawConfig,
+        string pluginDir)
+    {
+        var wrapped = new ConfigurationBuilder()
+            .Add(new EnvSubstitutingConfigurationSource(rawConfig))
+            .Build();
+
+        services.AddLogging(b => b.AddSimpleConsole());
+        services.AddSingleton<IConfiguration>(wrapped);
+        services.Configure<LockOverseerConfig>(wrapped);
+
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<AuthorityCache>();
+        AddAuthorityClient(services);
+        services.AddSingleton<ReconcileService>();
+        services.AddHostedService(sp => sp.GetRequiredService<ReconcileService>());
+        services.AddSingleton<ILockOverseerService, LockOverseerService>();
+
+        var outboxPath = System.IO.Path.Combine(pluginDir, "lockoverseer_outbox.json");
+        services.AddSingleton(sp => new PlaytimeOutbox(outboxPath, sp.GetRequiredService<ILogger<PlaytimeOutbox>>()));
+        services.AddSingleton<PlaytimeTracker>();
+        services.AddSingleton<EnforcementHooks>();
+        services.AddSingleton<BootstrapAdmins>();
+
+        return services;
+    }
+
     public static IServiceCollection AddAuthorityClient(
         IServiceCollection services,
         HttpMessageHandler? primaryHandler = null,
