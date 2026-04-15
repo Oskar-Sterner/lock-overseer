@@ -79,4 +79,25 @@ public sealed class EndpointsSmokeTests
         ((int)r.StatusCode).ShouldBe(201);
         await app.StopAsync();
     }
+
+    [Fact]
+    public async Task Get_online_returns_connected_players()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        var app = builder.Build();
+        LiveStateEndpoints.Map(app,
+            onlineProvider: () => new[] { new LiveOnlineEntry(76561198000000001, 3, "Alice") },
+            serverInfoProvider: () => new LiveServerInfo("dl_midtown", 24),
+            sessionProvider: _ => null,
+            kickAction: (_, _) => { },
+            broadcastAction: _ => { });
+        await app.StartAsync();
+
+        var client = app.GetTestClient();
+        var r = await client.GetAsync("/v1/online");
+        ((int)r.StatusCode).ShouldBe(200);
+        (await r.Content.ReadAsStringAsync()).ShouldContain("Alice");
+        await app.StopAsync();
+    }
 }
