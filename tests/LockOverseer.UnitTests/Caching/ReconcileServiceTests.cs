@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LockOverseer.Api;
@@ -39,5 +40,37 @@ public sealed class ReconcileServiceTests
 
         await svc.ReconcileOnceAsync(CancellationToken.None);
         cache.IsBanned(42).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Emits_one_warn_on_enter_degraded_and_one_info_on_recovery()
+    {
+        var client = Substitute.For<IAuthorityClient>();
+        client.GetActiveBansAsync(Arg.Any<CancellationToken>()).Returns(
+            Result<IReadOnlyList<BanResource>>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, "down")),
+            Result<IReadOnlyList<BanResource>>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, "down")),
+            Result<IReadOnlyList<BanResource>>.Ok(Array.Empty<BanResource>()));
+        client.GetActiveMutesAsync(Arg.Any<CancellationToken>()).Returns(
+            Result<IReadOnlyList<MuteResource>>.Ok(Array.Empty<MuteResource>()));
+        client.GetRolesAsync(Arg.Any<CancellationToken>()).Returns(
+            Result<IReadOnlyList<RoleResource>>.Ok(Array.Empty<RoleResource>()));
+
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<ReconcileService>>();
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        var cache = new AuthorityCache(time, Options.Create(new LockOverseerConfig()), NullLogger<AuthorityCache>.Instance);
+        var svc = new ReconcileService(client, cache, Options.Create(new LockOverseerConfig()), logger, time);
+
+        await svc.ReconcileOnceAsync(CancellationToken.None); // warn
+        await svc.ReconcileOnceAsync(CancellationToken.None); // silent (still degraded)
+        await svc.ReconcileOnceAsync(CancellationToken.None); // info
+
+        logger.ReceivedCalls()
+            .Count(c => c.GetMethodInfo().Name == "Log" &&
+                        (Microsoft.Extensions.Logging.LogLevel)c.GetArguments()[0]! == Microsoft.Extensions.Logging.LogLevel.Warning)
+            .ShouldBe(1);
+        logger.ReceivedCalls()
+            .Count(c => c.GetMethodInfo().Name == "Log" &&
+                        (Microsoft.Extensions.Logging.LogLevel)c.GetArguments()[0]! == Microsoft.Extensions.Logging.LogLevel.Information)
+            .ShouldBe(1);
     }
 }
