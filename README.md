@@ -42,7 +42,7 @@ The aim is a shared player-authority system so behavior stays consistent across 
 
 ## Status
 
-Not started. Issues and design discussion welcome.
+Started.
 
 ## License
 
