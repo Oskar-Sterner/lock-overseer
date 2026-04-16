@@ -159,6 +159,68 @@ Bound to `127.0.0.1:27080` by default. All requests require `X-API-Key`.
 
 OpenAPI docs at `/v1/docs` (toggle via `Http.DocsEnabled`). Rate limit: 60 req/min per key, 10 req/s burst on write routes. Errors use `application/problem+json`.
 
+## Real-time events
+
+LockOverseer subscribes to a Server-Sent Events stream from the Authority API at
+`GET /events/stream` so that moderation actions (bans, mutes, role / flag grants)
+issued from outside the game (e.g. a web dashboard) take effect on the live
+server within ~1 second instead of waiting for the next reconciliation cycle.
+When a `ban.created` event arrives for a connected player, the plugin kicks them
+immediately.
+
+### How it works
+
+- MockAPI publishes events after each mutation in its service layer (see
+  `MockAPI/src/lockoverseer_mockapi/events.py`) and streams them via
+  `GET /events/stream`.
+- The plugin's `AuthorityEventStream` background service holds a long-lived HTTP
+  read loop, parses SSE frames, and dispatches them to cache updates, kicks,
+  and hydration via `SseEventDispatcher`.
+- `ReconcileService` remains the safety net: if the stream is disconnected, the
+  plugin is at most `Cache.ReconcileIntervalSeconds` (default 300s) behind.
+
+### Event catalog
+
+| Event | Effect on the plugin |
+|---|---|
+| `ban.created` | Cache updated; connected player is kicked |
+| `ban.revoked` | Cache cleared for that player |
+| `mute.created` / `mute.revoked` | Mute cache updated |
+| `role.created` / `role.updated` / `role.deleted` | Role definitions refreshed |
+| `role_assignment.*` / `flag_assignment.*` | Connected player's permissions re-hydrated |
+| `sync_required` | Plugin runs one full reconcile |
+
+### Configuration
+
+New fields under `AuthorityApi.Events` in `lockoverseer.json`:
+
+```json
+{
+  "AuthorityApi": {
+    "Events": {
+      "Enabled": true,
+      "StreamPath": "/events/stream",
+      "ReconnectInitialDelayMs": 500,
+      "ReconnectMaxDelayMs": 30000,
+      "HeartbeatTimeoutMs": 45000
+    }
+  }
+}
+```
+
+Set `Enabled: false` to disable the SSE subscription entirely and fall back to
+poll-only behavior (the plugin will still function correctly, just with the
+original ~5-minute ban-propagation latency).
+
+### Observability
+
+`/overseer status` shows stream health:
+
+```
+stream: connected | disconnected
+last event id: <N>
+```
+
 ## Build
 
 ```bash
