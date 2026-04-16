@@ -108,4 +108,37 @@ public sealed class SseEventDispatcherTests
         kicker.DidNotReceive().KickBySteamId(Arg.Any<long>(), Arg.Any<string>());
         await svc.DidNotReceive().HydrateConnectedAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task MuteCreated_upserts_and_does_not_kick()
+    {
+        var (d, cache, kicker, _, _) = Build();
+        await d.DispatchAsync(new SseFrame(
+            Id: 7, Event: "mute.created",
+            Data: "{\"mute_id\":1,\"steam_id\":77,\"reason\":\"spam\"," +
+                  "\"issued_at\":\"2026-04-16T10:00:00+00:00\"," +
+                  "\"expires_at\":null}"),
+            CancellationToken.None);
+        cache.IsMuted(77).ShouldBeTrue();
+        kicker.DidNotReceive().KickBySteamId(Arg.Any<long>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task BanCreated_applied_twice_is_idempotent()
+    {
+        var (d, cache, kicker, _, _) = Build();
+        var frame = new SseFrame(
+            Id: 10, Event: "ban.created",
+            Data: "{\"ban_id\":17,\"steam_id\":123,\"reason\":\"x\"," +
+                  "\"issued_at\":\"2026-04-16T10:00:00+00:00\"," +
+                  "\"expires_at\":null,\"issued_by_steam_id\":null," +
+                  "\"issued_by_label\":\"sys\"}");
+        await d.DispatchAsync(frame, CancellationToken.None);
+        await d.DispatchAsync(frame, CancellationToken.None);
+        cache.IsBanned(123).ShouldBeTrue();
+        // Cache is last-writer-wins keyed by steamId; applying twice is a no-op overwrite.
+        // Kicker is called each time — that's fine because KickBySteamId is a no-op
+        // for offline players (handled at the plugin seam, out of this unit's scope).
+        kicker.Received(2).KickBySteamId(123, "x");
+    }
 }

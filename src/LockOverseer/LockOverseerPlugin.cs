@@ -140,17 +140,14 @@ public class LockOverseerPlugin : DeadworksPluginBase
             {
                 var steamId = (long)args.SteamId;
                 var name = args.Name;
-                var svc = _host.Services.GetRequiredService<ILockOverseerService>() as LockOverseer.Services.LockOverseerService;
+                var svc = _host.Services.GetRequiredService<ILockOverseerService>();
                 var client = _host.Services.GetRequiredService<LockOverseer.Api.IAuthorityClient>();
                 _ = Task.Run(async () =>
                 {
                     try { await client.UpsertPlayerAsync(steamId, name, _cts.Token).ConfigureAwait(false); }
                     catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] Upsert failed for {SteamId}", steamId); }
-                    if (svc is not null)
-                    {
-                        try { await svc.HydrateConnectedAsync(steamId, _cts.Token).ConfigureAwait(false); }
-                        catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] Hydrate failed for {SteamId}", steamId); }
-                    }
+                    try { await svc.HydrateConnectedAsync(steamId, _cts.Token).ConfigureAwait(false); }
+                    catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] Hydrate failed for {SteamId}", steamId); }
                 });
             }
             return true;
