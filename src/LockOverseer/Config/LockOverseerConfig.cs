@@ -14,6 +14,7 @@ public sealed class AuthorityApiSection
     public string ApiKey { get; set; } = "";
     public int TimeoutMs { get; set; } = 5000;
     public int RetryCount { get; set; } = 3;
+    public EventsSection Events { get; set; } = new();
 }
 
 public sealed class CacheSection
@@ -37,4 +38,13 @@ public sealed class BootstrapSection
 {
     public string AdminsFile { get; set; } = "admins.json";
     public bool SeedOnlyIfEmpty { get; set; } = true;
+}
+
+public sealed class EventsSection
+{
+    public bool Enabled { get; set; } = true;
+    public string StreamPath { get; set; } = "/events/stream";
+    public int ReconnectInitialDelayMs { get; set; } = 500;
+    public int ReconnectMaxDelayMs { get; set; } = 30_000;
+    public int HeartbeatTimeoutMs { get; set; } = 45_000;
 }
