@@ -27,6 +27,7 @@ public sealed class AuthorityEventStream : BackgroundService
         _factory = factory; _dispatcher = dispatcher; _cfg = cfg.Value; _log = log;
     }
 
+    public bool IsEnabled => _cfg.AuthorityApi.Events.Enabled;
     public bool IsConnected { get; private set; }
 
     protected override async Task ExecuteAsync(CancellationToken ct)

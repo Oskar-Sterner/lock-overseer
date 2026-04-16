@@ -411,8 +411,10 @@ public class LockOverseerPlugin : DeadworksPluginBase
             var stream = _host.Services.GetService<LockOverseer.Api.AuthorityEventStream>();
             if (stream is not null)
             {
-                sb.Append('\n').Append("  stream: ")
-                  .Append(stream.IsConnected ? "connected" : "disconnected");
+                sb.Append('\n').Append("  stream: ");
+                if (!stream.IsEnabled) sb.Append("disabled");
+                else if (stream.IsConnected) sb.Append("connected");
+                else sb.Append("disconnected");
             }
             var dispatcher = _host.Services.GetService<LockOverseer.Caching.SseEventDispatcher>();
             if (dispatcher is not null)
