@@ -61,6 +61,9 @@ public class LockOverseerPlugin : DeadworksPluginBase
 
             _host.StartAsync(_cts.Token).GetAwaiter().GetResult();
 
+            var delegatingKicker = _host.Services.GetRequiredService<LockOverseer.Bootstrap.DelegatingPlayerKicker>();
+            delegatingKicker.Impl = KickBySteamId;
+
             _hooks = _host.Services.GetRequiredService<EnforcementHooks>();
             _playtime = _host.Services.GetRequiredService<PlaytimeTracker>();
 

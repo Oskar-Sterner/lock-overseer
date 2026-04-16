@@ -41,6 +41,21 @@ public static class PluginServices
         services.AddHostedService(sp => sp.GetRequiredService<ReconcileService>());
         services.AddSingleton<ILockOverseerService, LockOverseerService>();
 
+        services.AddHttpClient("authority-events", (sp, http) =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<LockOverseerConfig>>().Value;
+            http.BaseAddress = new Uri(string.IsNullOrEmpty(cfg.AuthorityApi.BaseUrl)
+                ? "http://127.0.0.1:8080" : cfg.AuthorityApi.BaseUrl);
+            http.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.AddSingleton<DelegatingPlayerKicker>();
+        services.AddSingleton<LockOverseer.Contracts.IPlayerKicker>(sp =>
+            sp.GetRequiredService<DelegatingPlayerKicker>());
+        services.AddSingleton<LockOverseer.Caching.SseEventDispatcher>();
+        services.AddSingleton<LockOverseer.Api.AuthorityEventStream>();
+        services.AddHostedService(sp =>
+            sp.GetRequiredService<LockOverseer.Api.AuthorityEventStream>());
+
         var outboxPath = System.IO.Path.Combine(pluginDir, "lockoverseer_outbox.json");
         services.AddSingleton(sp => new PlaytimeOutbox(outboxPath, sp.GetRequiredService<ILogger<PlaytimeOutbox>>()));
         services.AddSingleton<PlaytimeTracker>();
@@ -80,6 +95,12 @@ public static class PluginServices
 
         return services;
     }
+}
+
+internal sealed class DelegatingPlayerKicker : LockOverseer.Contracts.IPlayerKicker
+{
+    public Action<long, string>? Impl { get; set; }
+    public void KickBySteamId(long steamId, string reason) => Impl?.Invoke(steamId, reason);
 }
 
 internal sealed class IdempotencyKeyReuseHandler : DelegatingHandler
