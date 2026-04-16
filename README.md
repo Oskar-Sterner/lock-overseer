@@ -4,6 +4,8 @@
 
 Central player-authority plugin for [Deadlock](https://store.steampowered.com/app/1422450/Deadlock/) using the [Deadworks](https://github.com/Deadworks-net/deadworks) managed plugin system.
 
+> **Beta.** LockOverseer is functional and has been validated end-to-end on a live Deadworks server: the full flow (chat commands, write-through to the Authority API, real-time SSE propagation of external bans, kick-on-ban) works. The HTTP surface to the Authority API and the in-process `ILockOverseerService` contract are considered stable for v0.1. Expect rough edges in ops tooling; please file issues for anything surprising.
+
 ## What it does
 
 LockOverseer is the first plugin installed on a Deadworks server. It owns per-player moderation state (bans, mutes, roles, flags, connect history, playtime) and exposes that state to:
@@ -85,12 +87,19 @@ cd MockAPI && uv sync && uv run lockoverseer-mockapi
 cd Plugins/LockOverseer/tools/LockOverseer.KeyGen
 dotnet run -- add --label "discord-bot"        # prints the raw key once
 
-# 3. Build and deploy the plugin
-cd ../../src/LockOverseer
+# 3. Bootstrap your admin list (one-time)
+cd ../../
+cp admins.example.json admins.json
+# edit admins.json and replace the placeholder Steam64 with yours
+
+# 4. Build and deploy the plugin
+cd src/LockOverseer
 dotnet build \
-  -p:DeadlockDir="/mnt/f/SteamLibrary/steamapps/common/Deadlock" \
-  -p:DeadlockBin="/mnt/f/SteamLibrary/steamapps/common/Deadlock/game/bin/win64"
+  -p:DeadlockDir="/path/to/Deadlock" \
+  -p:DeadlockBin="/path/to/Deadlock/game/bin/win64"
 ```
+
+`DeadlockDir` points at your Deadlock install root (the folder that contains `game/`). You can also set the `DEADLOCK_GAME_DIR` environment variable instead of passing the flags on every build.
 
 Remember to kill `deadworks.exe` before every build — the Deadworks server locks plugin DLLs.
 
@@ -159,16 +168,80 @@ Bound to `127.0.0.1:27080` by default. All requests require `X-API-Key`.
 
 OpenAPI docs at `/v1/docs` (toggle via `Http.DocsEnabled`). Rate limit: 60 req/min per key, 10 req/s burst on write routes. Errors use `application/problem+json`.
 
+## Real-time events
+
+LockOverseer subscribes to a Server-Sent Events stream from the Authority API at
+`GET /events/stream` so that moderation actions (bans, mutes, role / flag grants)
+issued from outside the game (e.g. a web dashboard) take effect on the live
+server within ~1 second instead of waiting for the next reconciliation cycle.
+When a `ban.created` event arrives for a connected player, the plugin kicks them
+immediately.
+
+### How it works
+
+- MockAPI publishes events after each mutation in its service layer (see
+  `MockAPI/src/lockoverseer_mockapi/events.py`) and streams them via
+  `GET /events/stream`.
+- The plugin's `AuthorityEventStream` background service holds a long-lived HTTP
+  read loop, parses SSE frames, and dispatches them to cache updates, kicks,
+  and hydration via `SseEventDispatcher`.
+- `ReconcileService` remains the safety net: if the stream is disconnected, the
+  plugin is at most `Cache.ReconcileIntervalSeconds` (default 300s) behind.
+
+### Event catalog
+
+| Event | Effect on the plugin |
+|---|---|
+| `ban.created` | Cache updated; connected player is kicked |
+| `ban.revoked` | Cache cleared for that player |
+| `mute.created` / `mute.revoked` | Mute cache updated |
+| `role.created` / `role.updated` / `role.deleted` | Role definitions refreshed |
+| `role_assignment.*` / `flag_assignment.*` | Connected player's permissions re-hydrated |
+| `sync_required` | Plugin runs one full reconcile |
+
+### Configuration
+
+New fields under `AuthorityApi.Events` in `lockoverseer.json`:
+
+```json
+{
+  "AuthorityApi": {
+    "Events": {
+      "Enabled": true,
+      "StreamPath": "/events/stream",
+      "ReconnectInitialDelayMs": 500,
+      "ReconnectMaxDelayMs": 30000,
+      "HeartbeatTimeoutMs": 45000
+    }
+  }
+}
+```
+
+Set `Enabled: false` to disable the SSE subscription entirely and fall back to
+poll-only behavior (the plugin will still function correctly, just with the
+original ~5-minute ban-propagation latency).
+
+### Observability
+
+`/overseer status` shows stream health:
+
+```
+stream: connected | disconnected
+last event id: <N>
+```
+
 ## Build
 
 ```bash
 cd Plugins/LockOverseer/src/LockOverseer
 dotnet build \
-  -p:DeadlockDir="/mnt/f/SteamLibrary/steamapps/common/Deadlock" \
-  -p:DeadlockBin="/mnt/f/SteamLibrary/steamapps/common/Deadlock/game/bin/win64"
+  -p:DeadlockDir="/path/to/Deadlock" \
+  -p:DeadlockBin="/path/to/Deadlock/game/bin/win64"
 ```
 
-The `DeployToGame` target copies `LockOverseer.dll`, `LockOverseer.Contracts.dll`, `lockoverseer.json`, `admins.json` (if present), and `plugin_api_keys.json` to `bin/win64/managed/plugins/`.
+`DeadlockDir` points at your Deadlock install root (the folder that contains `game/`). Setting the `DEADLOCK_GAME_DIR` environment variable works as an alternative to passing the flags.
+
+The `DeployToGame` target copies `LockOverseer.dll`, `LockOverseer.Contracts.dll`, `lockoverseer.json`, `admins.json` (if present), and `plugin_api_keys.json` to `bin/win64/managed/plugins/`. Keep the `.example.json` files checked in; copy them to `admins.json` / `plugin_api_keys.json` locally — those unsuffixed filenames are gitignored so operator-specific data stays off the remote.
 
 ## Peer-plugin usage
 

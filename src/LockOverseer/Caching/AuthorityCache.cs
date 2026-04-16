@@ -89,6 +89,7 @@ public sealed class AuthorityCache
 
     public void SetConnectedState(long steamId, ConnectedPlayerState state) => _connected[steamId] = state;
     public void ClearConnected(long steamId) => _connected.TryRemove(steamId, out _);
+    public bool IsConnected(long steamId) => _connected.ContainsKey(steamId);
 
     public IReadOnlyCollection<Ban> SnapshotActiveBans() => _activeBans.Values.ToArray();
     public IReadOnlyCollection<Mute> SnapshotActiveMutes() => _activeMutes.Values.ToArray();

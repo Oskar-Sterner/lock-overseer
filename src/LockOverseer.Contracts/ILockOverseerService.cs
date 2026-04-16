@@ -33,4 +33,8 @@ public interface ILockOverseerService
     ValueTask<long?> GetActiveRoleAssignmentIdAsync(long steamId, CancellationToken ct = default);
     ValueTask<long?> GetActiveFlagAssignmentIdAsync(long steamId, string flag, CancellationToken ct = default);
     ValueTask<IReadOnlyList<AuditEntry>> GetAuditAsync(int page, int pageSize, CancellationToken ct = default);
+
+    // SSE-driven cache management.
+    Task HydrateConnectedAsync(long steamId, CancellationToken ct = default);
+    Task RefreshRolesAsync(CancellationToken ct = default);
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -182,6 +183,48 @@ public sealed class LockOverseerService : ILockOverseerService
     {
         var result = await _client.GetAuditAsync(page, pageSize, ct).ConfigureAwait(false);
         return result.IsSuccess ? result.Value! : Array.Empty<AuditEntry>();
+    }
+
+    /// <summary>
+    /// Populates the connected-player cache slot (role + effective flag set) for a Steam64.
+    /// Called from the plugin's OnClientConnect hook so HasFlag/GetRole answer correctly
+    /// for chat-command permission checks.
+    /// </summary>
+    public async Task HydrateConnectedAsync(long steamId, CancellationToken ct = default)
+    {
+        string? roleName = null;
+        var roleResult = await _client.GetActiveRoleAssignmentAsync(steamId, ct).ConfigureAwait(false);
+        if (roleResult.IsSuccess) roleName = roleResult.Value!.RoleName;
+
+        var effective = new HashSet<string>(StringComparer.Ordinal);
+        if (roleName is not null && _cache.Roles.TryGetValue(roleName, out var def))
+            foreach (var f in def.Flags) effective.Add(f);
+
+        var flagsResult = await _client.GetPlayerFlagsAsync(steamId, ct).ConfigureAwait(false);
+        if (flagsResult.IsSuccess)
+        {
+            var now = DateTimeOffset.UtcNow;
+            foreach (var a in flagsResult.Value!)
+            {
+                if (a.RevokedAt is not null) continue;
+                if (a.ExpiresAt is DateTimeOffset exp && exp <= now) continue;
+                effective.Add(a.Flag);
+            }
+        }
+
+        _cache.SetConnectedState(steamId,
+            new ConnectedPlayerState(roleName, effective.ToFrozenSet(StringComparer.Ordinal)));
+        _log.LogInformation("[LockOverseer.Authority] Hydrated connected state for {SteamId}: role={Role} flags={Count}",
+            steamId, roleName ?? "-", effective.Count);
+    }
+
+    public async Task RefreshRolesAsync(CancellationToken ct = default)
+    {
+        var roles = await _client.GetRolesAsync(ct).ConfigureAwait(false);
+        if (!roles.IsSuccess) return;
+        _cache.ReplaceRoles(roles.Value!.ToDictionary(
+            r => r.Name,
+            r => new RoleDefinition(r.Name, r.Priority, r.Flags)));
     }
 
     // --- mappers (flat issuer fields, matching MockAPI BanOut/MuteOut/*AssignmentOut) ---

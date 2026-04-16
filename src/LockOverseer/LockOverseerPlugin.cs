@@ -61,6 +61,9 @@ public class LockOverseerPlugin : DeadworksPluginBase
 
             _host.StartAsync(_cts.Token).GetAwaiter().GetResult();
 
+            var delegatingKicker = _host.Services.GetRequiredService<LockOverseer.Bootstrap.DelegatingPlayerKicker>();
+            delegatingKicker.Impl = KickBySteamId;
+
             _hooks = _host.Services.GetRequiredService<EnforcementHooks>();
             _playtime = _host.Services.GetRequiredService<PlaytimeTracker>();
 
@@ -135,6 +138,21 @@ public class LockOverseerPlugin : DeadworksPluginBase
             if (_hooks is null) return true;
             if (_hooks.ShouldRejectConnect((long)args.SteamId, out _))
                 return false;
+
+            if (_host is not null && _cts is not null)
+            {
+                var steamId = (long)args.SteamId;
+                var name = args.Name;
+                var svc = _host.Services.GetRequiredService<ILockOverseerService>();
+                var client = _host.Services.GetRequiredService<LockOverseer.Api.IAuthorityClient>();
+                _ = Task.Run(async () =>
+                {
+                    try { await client.UpsertPlayerAsync(steamId, name, _cts.Token).ConfigureAwait(false); }
+                    catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] Upsert failed for {SteamId}", steamId); }
+                    try { await svc.HydrateConnectedAsync(steamId, _cts.Token).ConfigureAwait(false); }
+                    catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] Hydrate failed for {SteamId}", steamId); }
+                });
+            }
             return true;
         }
         catch (Exception ex)
@@ -160,7 +178,10 @@ public class LockOverseerPlugin : DeadworksPluginBase
         {
             if (_playtime is null || _cts is null) return;
             if (_slotIndex.TryRemove(args.Slot, out var entry))
+            {
                 _ = _playtime.EndSessionAsync(entry.SteamId, _cts.Token);
+                _host?.Services.GetRequiredService<AuthorityCache>().ClearConnected(entry.SteamId);
+            }
         }
         catch (Exception ex) { _log?.LogError(ex, "[LockOverseer.Authority] OnClientDisconnect failed"); }
     }
@@ -386,6 +407,19 @@ public class LockOverseerPlugin : DeadworksPluginBase
                 sb.Append('\n').Append("  last reconcile: ")
                   .Append(reconcile.LastReconcileAt?.ToString("o") ?? "never")
                   .Append("  degraded=").Append(reconcile.IsDegraded);
+            }
+            var stream = _host.Services.GetService<LockOverseer.Api.AuthorityEventStream>();
+            if (stream is not null)
+            {
+                sb.Append('\n').Append("  stream: ");
+                if (!stream.IsEnabled) sb.Append("disabled");
+                else if (stream.IsConnected) sb.Append("connected");
+                else sb.Append("disconnected");
+            }
+            var dispatcher = _host.Services.GetService<LockOverseer.Caching.SseEventDispatcher>();
+            if (dispatcher is not null)
+            {
+                sb.Append('\n').Append("  last event id: ").Append(dispatcher.LastEventId);
             }
         }
         sb.Append('\n').Append("  connected players: ").Append(_slotIndex.Count);

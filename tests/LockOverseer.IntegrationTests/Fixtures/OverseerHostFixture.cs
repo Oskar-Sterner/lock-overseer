@@ -31,6 +31,10 @@ public sealed class OverseerHostFixture : IAsyncLifetime
         _service ?? throw new InvalidOperationException(
             "OverseerHostFixture not initialized — the test's ctor must call UseAuthority() first.");
 
+    public IServiceProvider Services =>
+        _host?.Services ?? throw new InvalidOperationException(
+            "OverseerHostFixture not initialized — the test's ctor must call UseAuthority() first.");
+
     public Action<long, string> OnKick { get; set; } = (_, _) => { };
 
     /// <summary>
@@ -76,6 +80,10 @@ public sealed class OverseerHostFixture : IAsyncLifetime
         });
         _host = builder.Build();
         await _host.StartAsync().ConfigureAwait(false);
+
+        var kicker = _host.Services.GetRequiredService<LockOverseer.Bootstrap.DelegatingPlayerKicker>();
+        kicker.Impl = (sid, reason) => OnKick(sid, reason);
+
         _service = _host.Services.GetRequiredService<ILockOverseerService>();
 
         _httpHost = new HttpHost(new HttpHostOptions
