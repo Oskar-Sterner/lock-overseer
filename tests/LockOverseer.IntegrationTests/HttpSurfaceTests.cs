@@ -5,15 +5,15 @@ using Xunit;
 
 namespace LockOverseer.IntegrationTests;
 
-public sealed class HttpSurfaceTests : IClassFixture<MockApiContainerFixture>, IClassFixture<OverseerHostFixture>
+public sealed class HttpSurfaceTests : IClassFixture<ExternalApiFixture>, IClassFixture<OverseerHostFixture>
 {
-    private readonly MockApiContainerFixture _api;
+    private readonly ExternalApiFixture _api;
     private readonly OverseerHostFixture _host;
-    public HttpSurfaceTests(MockApiContainerFixture api, OverseerHostFixture host)
+    public HttpSurfaceTests(ExternalApiFixture api, OverseerHostFixture host)
     {
         _api = api;
         _host = host;
-        _api.DockerAvailable.ShouldBeTrue(_api.UnavailableReason ?? "MockAPI failed to start");
+        _api.Available.ShouldBeTrue(_api.UnavailableReason ?? "external API failed to start");
         _host.UseAuthority(_api.BaseUri, _api.ApiKey);
     }
 

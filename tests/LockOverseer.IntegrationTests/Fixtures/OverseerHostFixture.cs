@@ -12,8 +12,8 @@ using Xunit;
 namespace LockOverseer.IntegrationTests.Fixtures;
 
 /// <summary>
-/// In-process host that composes the LockOverseer DI graph (Phase B) pointed at a
-/// MockAPI subprocess and starts an HttpHost exposing the plugin's REST surface.
+/// In-process host that composes the LockOverseer DI graph (Phase B) pointed at an
+/// external API subprocess and starts an HttpHost exposing the plugin's REST surface.
 ///
 /// Initialization is deferred to the first <see cref="UseAuthority"/> call because
 /// xunit's IClassFixture creates the fixture BEFORE the test class constructor runs

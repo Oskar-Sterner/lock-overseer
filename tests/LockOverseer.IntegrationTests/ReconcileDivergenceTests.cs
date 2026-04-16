@@ -5,15 +5,15 @@ using Xunit;
 
 namespace LockOverseer.IntegrationTests;
 
-public sealed class ReconcileDivergenceTests : IClassFixture<MockApiContainerFixture>, IClassFixture<OverseerHostFixture>
+public sealed class ReconcileDivergenceTests : IClassFixture<ExternalApiFixture>, IClassFixture<OverseerHostFixture>
 {
-    private readonly MockApiContainerFixture _api;
+    private readonly ExternalApiFixture _api;
     private readonly OverseerHostFixture _host;
-    public ReconcileDivergenceTests(MockApiContainerFixture api, OverseerHostFixture host)
+    public ReconcileDivergenceTests(ExternalApiFixture api, OverseerHostFixture host)
     {
         _api = api;
         _host = host;
-        _api.DockerAvailable.ShouldBeTrue(_api.UnavailableReason ?? "MockAPI failed to start");
+        _api.Available.ShouldBeTrue(_api.UnavailableReason ?? "external API failed to start");
         _host.UseAuthority(_api.BaseUri, _api.ApiKey);
     }
 

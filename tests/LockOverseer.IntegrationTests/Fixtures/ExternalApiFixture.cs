@@ -6,15 +6,16 @@ using Xunit;
 namespace LockOverseer.IntegrationTests.Fixtures;
 
 /// <summary>
-/// Launches the real MockAPI (`uv run lockoverseer-mockapi serve`) as a local subprocess
-/// against a fresh SQLite database and a freshly-provisioned API key.
+/// Launches a local reference implementation of the external Authority API
+/// (`uv run lockoverseer-mockapi serve`) as a subprocess against a fresh SQLite
+/// database and a freshly-provisioned API key.
 ///
-/// This exercises the full plugin ↔ MockAPI HTTP contract (exactly what the user asked to
-/// validate) without requiring Docker or Testcontainers. `DockerAvailable` is kept as a
-/// property for backward compatibility with existing tests, but now signals
-/// "MockAPI subprocess is up" and is only false when `uv` or the MockAPI package is missing.
+/// This exercises the full plugin ↔ external API HTTP contract without requiring
+/// Docker or Testcontainers. The <see cref="Available"/> property is true once
+/// the subprocess is up and healthy; it is false when <c>uv</c> or the local
+/// reference-impl package is missing on the host.
 /// </summary>
-public sealed class MockApiContainerFixture : IAsyncLifetime
+public sealed class ExternalApiFixture : IAsyncLifetime
 {
     private Process? _proc;
     private string? _workDir;
@@ -22,8 +23,11 @@ public sealed class MockApiContainerFixture : IAsyncLifetime
 
     public Uri BaseUri { get; private set; } = null!;
     public string ApiKey { get; private set; } = "";
-    public bool DockerAvailable { get; private set; }
+    public bool Available { get; private set; }
     public string? UnavailableReason { get; private set; }
+
+    /// <summary>Legacy alias kept so existing tests keep compiling.</summary>
+    public bool DockerAvailable => Available;
 
     public async Task InitializeAsync()
     {
@@ -34,13 +38,13 @@ public sealed class MockApiContainerFixture : IAsyncLifetime
 
             if (!File.Exists(Path.Combine(_workDir, "pyproject.toml")))
             {
-                UnavailableReason = $"MockAPI not found at {_workDir}";
+                UnavailableReason = $"external API reference impl not found at {_workDir}";
                 return;
             }
 
-            _tempDir = Path.Combine(Path.GetTempPath(), $"lockoverseer_mockapi_{Guid.NewGuid():N}");
+            _tempDir = Path.Combine(Path.GetTempPath(), $"lockoverseer_extapi_{Guid.NewGuid():N}");
             Directory.CreateDirectory(_tempDir);
-            var dbPath = Path.Combine(_tempDir, "mock.db");
+            var dbPath = Path.Combine(_tempDir, "external_api.db");
             var dbUrl = $"sqlite+aiosqlite:///{dbPath}";
 
             // 1. Provision an API key (also creates + migrates the DB).
@@ -61,16 +65,16 @@ public sealed class MockApiContainerFixture : IAsyncLifetime
             var ready = await WaitForHealthyAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
             if (!ready)
             {
-                UnavailableReason = "MockAPI did not become healthy within 30s";
+                UnavailableReason = "external API did not become healthy within 30s";
                 return;
             }
 
-            DockerAvailable = true;
+            Available = true;
         }
         catch (Exception ex)
         {
-            DockerAvailable = false;
-            UnavailableReason = $"MockAPI unavailable: {ex.Message}";
+            Available = false;
+            UnavailableReason = $"external API unavailable: {ex.Message}";
         }
     }
 

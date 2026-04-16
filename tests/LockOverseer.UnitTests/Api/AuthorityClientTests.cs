@@ -107,7 +107,7 @@ public sealed class AuthorityClientTests
     [Fact]
     public async Task IssueBanAsync_sends_flat_nested_body_to_authority()
     {
-        // Regression guard: plugin must POST the MockAPI BanCreateIn shape exactly.
+        // Regression guard: plugin must POST the external API's BanCreateIn shape exactly.
         string? seenBody = null;
         var handler = new FakeHandler((req, _) =>
         {

@@ -113,10 +113,10 @@ public sealed class LockOverseerServiceTests
     }
 
     [Fact]
-    public void ToModel_parses_MockAPI_shape_BanResource_into_Ban_with_correct_issuer()
+    public void ToModel_parses_external_api_shape_BanResource_into_Ban_with_correct_issuer()
     {
         // Regression guard: the wire shape uses flat issuer fields. This emulates a real
-        // MockAPI BanOut response and round-trips it through JsonDefaults.Options.
+        // external API BanOut response and round-trips it through JsonDefaults.Options.
         const string json = """
             {
               "id": 42,

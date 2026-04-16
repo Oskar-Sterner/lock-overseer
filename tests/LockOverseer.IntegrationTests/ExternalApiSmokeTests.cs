@@ -4,15 +4,15 @@ using Xunit;
 
 namespace LockOverseer.IntegrationTests;
 
-public sealed class MockApiContainerSmokeTests : IClassFixture<MockApiContainerFixture>
+public sealed class ExternalApiSmokeTests : IClassFixture<ExternalApiFixture>
 {
-    private readonly MockApiContainerFixture _fx;
-    public MockApiContainerSmokeTests(MockApiContainerFixture fx) => _fx = fx;
+    private readonly ExternalApiFixture _fx;
+    public ExternalApiSmokeTests(ExternalApiFixture fx) => _fx = fx;
 
     [Fact]
     public async Task Health_endpoint_is_reachable()
     {
-        _fx.DockerAvailable.ShouldBeTrue(_fx.UnavailableReason ?? "MockAPI failed to start");
+        _fx.Available.ShouldBeTrue(_fx.UnavailableReason ?? "external API failed to start");
 
         using var http = new HttpClient { BaseAddress = _fx.BaseUri };
         var r = await http.GetAsync("/health");
@@ -22,7 +22,7 @@ public sealed class MockApiContainerSmokeTests : IClassFixture<MockApiContainerF
     [Fact]
     public async Task Bans_endpoint_requires_api_key()
     {
-        _fx.DockerAvailable.ShouldBeTrue(_fx.UnavailableReason ?? "MockAPI failed to start");
+        _fx.Available.ShouldBeTrue(_fx.UnavailableReason ?? "external API failed to start");
 
         using var http = new HttpClient { BaseAddress = _fx.BaseUri };
         var unauth = await http.GetAsync("/bans");

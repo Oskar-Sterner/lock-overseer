@@ -25,9 +25,9 @@ public sealed class BootstrapAdmins
     public async Task SeedAsync(string adminsJsonPath, CancellationToken ct)
     {
         // Ensure bootstrap role definitions (admin/mod/player) exist before we
-        // try to assign admin to anybody from admins.json. MockAPI and the real
-        // Authority will 404 a role grant referencing a missing role, so this
-        // step must succeed first. Idempotent: roles are created only if absent.
+        // try to assign admin to anybody from admins.json. The external API
+        // will 404 a role grant referencing a missing role, so this step must
+        // succeed first. Idempotent: roles are created only if absent.
         await SeedRolesAsync(ct).ConfigureAwait(false);
 
         if (!File.Exists(adminsJsonPath))

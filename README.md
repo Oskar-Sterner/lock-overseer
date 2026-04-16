@@ -13,7 +13,7 @@ LockOverseer is the first plugin installed on a Deadworks server. It owns per-pl
 - **Peer plugins** in the same process via the in-process `ILockOverseerService` C# contract.
 - **External tooling** (Discord bots, admin dashboards) via a localhost-bound HTTPS-capable REST surface.
 
-The data itself lives in an external Authority API (HTTP + SQLite). Locally that service is `MockAPI/`; in production the same contract points at your real service.
+The data itself lives in an **external Authority API** — any HTTP service that honors the contract works. For local development you run your own reference implementation; in production the same contract points at your real service.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ flowchart LR
     end
     Ext["External tools<br/>(Discord bot, dashboard)"]
     Ext -- "HTTP + X-API-Key<br/>127.0.0.1:27080" --> LO
-    API["Authority API<br/>FastAPI + SQLite<br/>(locally: MockAPI/)"]
+    API["External Authority API<br/>HTTP + X-API-Key"]
     LO -- "HTTP + X-API-Key" --> API
 ```
 
@@ -80,8 +80,10 @@ sequenceDiagram
 ## Quick start
 
 ```bash
-# 1. Start MockAPI locally
-cd MockAPI && uv sync && uv run lockoverseer-mockapi
+# 1. Start your external Authority API
+#    Run your own implementation of the contract (any HTTP service works).
+#    For local dev, the plugin expects it to be reachable at AuthorityApi.BaseUrl
+#    (default http://127.0.0.1:8080) and to authenticate via X-API-Key.
 
 # 2. Generate a plugin API key for your Discord bot
 cd Plugins/LockOverseer/tools/LockOverseer.KeyGen
@@ -179,9 +181,9 @@ immediately.
 
 ### How it works
 
-- MockAPI publishes events after each mutation in its service layer (see
-  `MockAPI/src/lockoverseer_mockapi/events.py`) and streams them via
-  `GET /events/stream`.
+- The external Authority API publishes events after each mutation and streams
+  them via `GET /events/stream` (an in-process pub/sub + ring buffer in the
+  reference implementation — any equivalent mechanism works on the server side).
 - The plugin's `AuthorityEventStream` background service holds a long-lived HTTP
   read loop, parses SSE frames, and dispatches them to cache updates, kicks,
   and hydration via `SseEventDispatcher`.

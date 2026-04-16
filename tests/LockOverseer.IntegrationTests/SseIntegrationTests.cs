@@ -12,14 +12,14 @@ using Xunit;
 namespace LockOverseer.IntegrationTests;
 
 public sealed class SseIntegrationTests
-    : IClassFixture<MockApiContainerFixture>, IClassFixture<OverseerHostFixture>
+    : IClassFixture<ExternalApiFixture>, IClassFixture<OverseerHostFixture>
 {
-    private readonly MockApiContainerFixture _mock;
+    private readonly ExternalApiFixture _mock;
     private readonly OverseerHostFixture _host;
     private long _lastKickedSteamId;
     private string? _lastKickReason;
 
-    public SseIntegrationTests(MockApiContainerFixture mock, OverseerHostFixture host)
+    public SseIntegrationTests(ExternalApiFixture mock, OverseerHostFixture host)
     {
         _mock = mock;
         _host = host;
@@ -34,9 +34,9 @@ public sealed class SseIntegrationTests
     [Fact]
     public async Task Web_issued_ban_propagates_to_plugin_cache_and_triggers_kick_within_2s()
     {
-        if (!_mock.DockerAvailable)
+        if (!_mock.Available)
         {
-            // MockAPI subprocess couldn't start (missing uv, etc.) — skip.
+            // external API subprocess couldn't start (missing uv, etc.) — skip.
             return;
         }
 
@@ -76,7 +76,7 @@ public sealed class SseIntegrationTests
     [Fact]
     public async Task Web_issued_role_assignment_hydrates_connected_player_within_2s()
     {
-        if (!_mock.DockerAvailable)
+        if (!_mock.Available)
         {
             return;
         }

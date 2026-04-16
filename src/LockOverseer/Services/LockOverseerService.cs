@@ -37,8 +37,8 @@ public sealed class LockOverseerService : ILockOverseerService
         var r = await _client.GetPlayerAsync(steamId, ct).ConfigureAwait(false);
         if (!r.IsSuccess) return null;
         var p = r.Value!;
-        // MockAPI's PlayerOut is minimal. Enrich from the local cache + connected state
-        // for fields the authority doesn't include in the player resource.
+        // The external API's PlayerOut is minimal. Enrich from the local cache + connected
+        // state for fields the authority doesn't include in the player resource.
         var role = _cache.GetConnectedRole(steamId) ?? _cache.GetRole(steamId);
         var flags = _cache.GetFlagsSnapshot(steamId);
         Ban? activeBan = _cache.TryGetActiveBan(steamId, out var b) ? b : null;
@@ -227,7 +227,7 @@ public sealed class LockOverseerService : ILockOverseerService
             r => new RoleDefinition(r.Name, r.Priority, r.Flags)));
     }
 
-    // --- mappers (flat issuer fields, matching MockAPI BanOut/MuteOut/*AssignmentOut) ---
+    // --- mappers (flat issuer fields, matching the external API's BanOut/MuteOut/*AssignmentOut) ---
     private static Ban ToModel(BanResource r) => new(
         r.Id, r.SteamId, r.Reason, r.IssuedAt, r.ExpiresAt, r.RevokedAt,
         new Issuer(r.IssuedBySteamId, r.IssuedByLabel),
