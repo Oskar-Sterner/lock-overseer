@@ -408,6 +408,17 @@ public class LockOverseerPlugin : DeadworksPluginBase
                   .Append(reconcile.LastReconcileAt?.ToString("o") ?? "never")
                   .Append("  degraded=").Append(reconcile.IsDegraded);
             }
+            var stream = _host.Services.GetService<LockOverseer.Api.AuthorityEventStream>();
+            if (stream is not null)
+            {
+                sb.Append('\n').Append("  stream: ")
+                  .Append(stream.IsConnected ? "connected" : "disconnected");
+            }
+            var dispatcher = _host.Services.GetService<LockOverseer.Caching.SseEventDispatcher>();
+            if (dispatcher is not null)
+            {
+                sb.Append('\n').Append("  last event id: ").Append(dispatcher.LastEventId);
+            }
         }
         sb.Append('\n').Append("  connected players: ").Append(_slotIndex.Count);
         foreach (var kv in _slotIndex)
