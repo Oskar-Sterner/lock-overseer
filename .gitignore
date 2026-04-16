@@ -3,3 +3,7 @@ obj/
 *.user
 .vs/
 TestResults/
+
+# Local runtime config (copy from the corresponding .example.json files)
+admins.json
+plugin_api_keys.json

@@ -4,6 +4,8 @@
 
 Central player-authority plugin for [Deadlock](https://store.steampowered.com/app/1422450/Deadlock/) using the [Deadworks](https://github.com/Deadworks-net/deadworks) managed plugin system.
 
+> **Beta.** LockOverseer is functional and has been validated end-to-end on a live Deadworks server: the full flow (chat commands, write-through to the Authority API, real-time SSE propagation of external bans, kick-on-ban) works. The HTTP surface to the Authority API and the in-process `ILockOverseerService` contract are considered stable for v0.1. Expect rough edges in ops tooling; please file issues for anything surprising.
+
 ## What it does
 
 LockOverseer is the first plugin installed on a Deadworks server. It owns per-player moderation state (bans, mutes, roles, flags, connect history, playtime) and exposes that state to:
@@ -85,12 +87,19 @@ cd MockAPI && uv sync && uv run lockoverseer-mockapi
 cd Plugins/LockOverseer/tools/LockOverseer.KeyGen
 dotnet run -- add --label "discord-bot"        # prints the raw key once
 
-# 3. Build and deploy the plugin
-cd ../../src/LockOverseer
+# 3. Bootstrap your admin list (one-time)
+cd ../../
+cp admins.example.json admins.json
+# edit admins.json and replace the placeholder Steam64 with yours
+
+# 4. Build and deploy the plugin
+cd src/LockOverseer
 dotnet build \
-  -p:DeadlockDir="/mnt/f/SteamLibrary/steamapps/common/Deadlock" \
-  -p:DeadlockBin="/mnt/f/SteamLibrary/steamapps/common/Deadlock/game/bin/win64"
+  -p:DeadlockDir="/path/to/Deadlock" \
+  -p:DeadlockBin="/path/to/Deadlock/game/bin/win64"
 ```
+
+`DeadlockDir` points at your Deadlock install root (the folder that contains `game/`). You can also set the `DEADLOCK_GAME_DIR` environment variable instead of passing the flags on every build.
 
 Remember to kill `deadworks.exe` before every build — the Deadworks server locks plugin DLLs.
 
@@ -226,11 +235,13 @@ last event id: <N>
 ```bash
 cd Plugins/LockOverseer/src/LockOverseer
 dotnet build \
-  -p:DeadlockDir="/mnt/f/SteamLibrary/steamapps/common/Deadlock" \
-  -p:DeadlockBin="/mnt/f/SteamLibrary/steamapps/common/Deadlock/game/bin/win64"
+  -p:DeadlockDir="/path/to/Deadlock" \
+  -p:DeadlockBin="/path/to/Deadlock/game/bin/win64"
 ```
 
-The `DeployToGame` target copies `LockOverseer.dll`, `LockOverseer.Contracts.dll`, `lockoverseer.json`, `admins.json` (if present), and `plugin_api_keys.json` to `bin/win64/managed/plugins/`.
+`DeadlockDir` points at your Deadlock install root (the folder that contains `game/`). Setting the `DEADLOCK_GAME_DIR` environment variable works as an alternative to passing the flags.
+
+The `DeployToGame` target copies `LockOverseer.dll`, `LockOverseer.Contracts.dll`, `lockoverseer.json`, `admins.json` (if present), and `plugin_api_keys.json` to `bin/win64/managed/plugins/`. Keep the `.example.json` files checked in; copy them to `admins.json` / `plugin_api_keys.json` locally — those unsuffixed filenames are gitignored so operator-specific data stays off the remote.
 
 ## Peer-plugin usage
 
