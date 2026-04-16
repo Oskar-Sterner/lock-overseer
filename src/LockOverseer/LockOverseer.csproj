@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="LockOverseer.IntegrationTests" />
+    <InternalsVisibleTo Include="LockOverseer.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="DeadworksManaged.Api">
       <HintPath>$(DeadlockBin)\managed\DeadworksManaged.Api.dll</HintPath>
       <Private>false</Private>
