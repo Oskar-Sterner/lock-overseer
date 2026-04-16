@@ -111,8 +111,24 @@ public sealed partial class AuthorityClient : IAuthorityClient
     public ValueTask<Result<PlayerResource>> GetPlayerAsync(long steamId, CancellationToken ct = default)
         => GetAsync<PlayerResource>($"/players/{steamId}", ct);
 
-    public ValueTask<Result<PlayerResource>> UpsertPlayerAsync(long steamId, string? lastKnownName, CancellationToken ct = default)
-        => PostAsync<object, PlayerResource>($"/players/{steamId}", new { last_known_name = lastKnownName }, ct);
+    public async ValueTask<Result<PlayerResource>> UpsertPlayerAsync(long steamId, string? lastKnownName, CancellationToken ct = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Patch, $"/players/{steamId}")
+            {
+                Content = JsonContent.Create<object>(new { last_known_name = lastKnownName }, options: JsonDefaults.Options)
+            };
+            ApplyAuth(req);
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            return await DeserializeAsync<PlayerResource>(resp, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            _log.LogWarning(ex, "[LockOverseer.Authority] PATCH /players/{SteamId} unreachable", steamId);
+            return Result<PlayerResource>.Fail(new AuthorityError(AuthorityErrorKind.Unreachable, ex.Message));
+        }
+    }
 
     public ValueTask<Result<PlayerResource>> AddPlaytimeAsync(long steamId, long seconds, CancellationToken ct = default)
         => PostAsync<object, PlayerResource>($"/players/{steamId}/playtime", new { seconds }, ct);
