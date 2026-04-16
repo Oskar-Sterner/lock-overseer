@@ -41,10 +41,23 @@ public sealed class AuthorityEventStream : BackgroundService
         {
             try
             {
-                await RunOnceAsync(ct).ConfigureAwait(false);
-                attempt = 0;  // reset on clean EOF (rare)
+                await RunOnceAsync(() => attempt = 0, ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                var delay = Math.Min(
+                    _cfg.AuthorityApi.Events.ReconnectMaxDelayMs,
+                    _cfg.AuthorityApi.Events.ReconnectInitialDelayMs * (int)Math.Pow(2, Math.Min(attempt, 6)));
+                _log.LogWarning("[LockOverseer.Events] heartbeat timeout after {Ms}ms; reconnecting in {DelayMs}ms",
+                    _cfg.AuthorityApi.Events.HeartbeatTimeoutMs, delay);
+                attempt++;
+                try { await Task.Delay(delay, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+            }
             catch (Exception ex)
             {
                 var delay = Math.Min(
@@ -61,7 +74,7 @@ public sealed class AuthorityEventStream : BackgroundService
         }
     }
 
-    private async Task RunOnceAsync(CancellationToken ct)
+    private async Task RunOnceAsync(Action onFrameDispatched, CancellationToken ct)
     {
         var http = _factory.CreateClient("authority-events");
         using var req = new HttpRequestMessage(HttpMethod.Get, _cfg.AuthorityApi.Events.StreamPath);
@@ -82,6 +95,7 @@ public sealed class AuthorityEventStream : BackgroundService
             using var reader = new StreamReader(stream);
             var buffer = new char[4096];
             var frames = new List<SseFrame>(8);
+            bool dispatchedAny = false;
             while (!ct.IsCancellationRequested)
             {
                 int n;
@@ -98,6 +112,11 @@ public sealed class AuthorityEventStream : BackgroundService
                     foreach (var f in frames)
                         await _dispatcher.DispatchAsync(f, ct).ConfigureAwait(false);
                     frames.Clear();
+                    if (!dispatchedAny)
+                    {
+                        dispatchedAny = true;
+                        onFrameDispatched();
+                    }
                 }
             }
         }

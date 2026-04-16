@@ -154,4 +154,96 @@ public sealed class AuthorityEventStreamTests
 
         secondReqHeader.ShouldBe("5");
     }
+
+    [Fact]
+    public async Task Heartbeat_timeout_triggers_reconnect_not_exit()
+    {
+        var (dispatcher, _, _) = BuildDispatcher();
+        int calls = 0;
+        var secondRequestFired = new ManualResetEventSlim(false);
+        var handler = new StreamHandler(async req =>
+        {
+            calls++;
+            if (calls == 1)
+            {
+                // Return a response that yields one frame, then keeps the
+                // stream open indefinitely with no more data — forcing the
+                // heartbeat timeout to fire on the plugin side.
+                var stream = new System.IO.MemoryStream(
+                    System.Text.Encoding.UTF8.GetBytes(
+                        "id: 1\nevent: ban.revoked\ndata: {\"ban_id\":1,\"steam_id\":42," +
+                        "\"revoked_at\":\"2026-04-16T10:00:00+00:00\",\"revoke_reason\":null}\n\n"));
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StreamContent(new HoldingStream(stream)),
+                };
+            }
+            secondRequestFired.Set();
+            return await Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        });
+        var http = new HttpClient(handler) { BaseAddress = new Uri("http://stream") };
+
+        var cfg = Options.Create(new LockOverseerConfig
+        {
+            AuthorityApi = new AuthorityApiSection
+            {
+                Events = new EventsSection
+                {
+                    Enabled = true,
+                    StreamPath = "/events/stream",
+                    ReconnectInitialDelayMs = 10,
+                    ReconnectMaxDelayMs = 50,
+                    HeartbeatTimeoutMs = 200,  // short for test
+                }
+            }
+        });
+
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient("authority-events").Returns(http);
+
+        var stream = new AuthorityEventStream(factory, dispatcher, cfg,
+            NullLogger<AuthorityEventStream>.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await stream.StartAsync(cts.Token);
+
+        var reconnected = secondRequestFired.Wait(TimeSpan.FromSeconds(3));
+        await stream.StopAsync(CancellationToken.None);
+
+        reconnected.ShouldBeTrue("BackgroundService should reconnect after heartbeat timeout, not exit");
+    }
+
+    private sealed class HoldingStream : System.IO.Stream
+    {
+        private readonly System.IO.Stream _inner;
+        public HoldingStream(System.IO.Stream inner) => _inner = inner;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, System.IO.SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int n = _inner.Read(buffer, offset, count);
+            if (n > 0) return n;
+            // Inner EOF; block indefinitely so reader waits for heartbeat timeout.
+            Thread.Sleep(Timeout.Infinite);
+            return 0;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            int n = await _inner.ReadAsync(buffer, ct).ConfigureAwait(false);
+            if (n > 0) return n;
+            // Inner EOF; wait for the read CTS to fire (heartbeat timeout).
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            return 0;
+        }
+    }
 }
